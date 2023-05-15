@@ -1,0 +1,55 @@
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>Calsimtor</title>
+    <script src="main.js"></script>
+    <style>
+.sourceToken {
+    display: flex;
+}
+* > .sourceToken {
+    justify-content: space-around;
+}
+textarea {
+    resize: vertical;
+    width: 100%;
+    font-family: monospace;
+    font-size: 1.25em;
+}
+input {
+    width: 100%;
+    font-family: monospace;
+    font-size: 1.25em;
+}
+#execution {
+    font-family: monospace;
+    font-size: 1.25em;
+}
+    </style>
+</head>
+<body>
+    <h1>Calsimtor</h1>
+
+    <div class="sourceToken">
+        <textarea id="source" placeholder="Start typing here..." oninput="sourceOnInput(this)"></textarea>
+
+        <div style="width:100%" >
+            <textarea id="shown" style="height:20em" placeholder="Tokens will appear here" readonly></textarea>
+            <br>
+            <textarea id="tokenError" style="height:8em" placeholder="Lexicalization log" readonly></textarea>
+        </div>
+    </div>
+
+    <br>
+
+    <button onclick="interpret(tokens)">Execute</button>
+
+    <h2>Execution</h2>
+
+    <template>
+
+    </template>
+    <div id="execution">
+    </div>
+</body>
+</html>
