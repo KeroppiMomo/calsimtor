@@ -29,6 +29,7 @@ class RuntimeError {
     ) {}
 }
 class RuntimeSyntaxError extends RuntimeError {}
+class RuntimeMathError extends RuntimeError {}
 
 class Variable {
     static all = {
@@ -263,7 +264,7 @@ let tokens = [];
 let errorPosition = [];
 function sourceOnInput(el: HTMLTextAreaElement) {
     const result = lexicalize(el.value);
-    // window.result = result;
+    window.result = result;
     tokens = result.tokens;
     errorPosition = result.errorPosition;
 

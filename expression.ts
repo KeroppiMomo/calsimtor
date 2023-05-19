@@ -8,6 +8,31 @@ class TokenType {
     }
 }
 
+
+type ParenFuncArgNum = number | number[];
+type ParenFunc = (...args: number[]) => number;
+class ParenFuncTokenType extends TokenType {
+    argNum: ParenFuncArgNum;
+    fn: ParenFunc;
+
+    constructor(source: string, shown: string, argNum: ParenFuncArgNum, fn: ParenFunc);
+    constructor(source: string, argNum: ParenFuncArgNum, fn: ParenFunc);
+    constructor(source: string, arg1: string | ParenFuncArgNum, arg2: ParenFuncArgNum | ParenFunc, arg3?: ParenFunc) {
+        if (arg3 !== undefined) {
+            // 1st definiton
+            const shown = arg1 as string;
+            super(source, shown);
+            this.argNum = arg2 as ParenFuncArgNum;
+            this.fn = arg3;
+        } else {
+            // 2nd definition
+            super(source, undefined);
+            this.argNum = arg1 as ParenFuncArgNum;
+            this.fn = arg2 as ParenFunc;
+        }
+    }
+}
+
 const literalTokenTypes = {
     num0: new TokenType("0"),
     num1: new TokenType("1"),
@@ -24,18 +49,62 @@ const literalTokenTypes = {
     dot: new TokenType("."),
 };
 
+const parenFuncTokenTypes = {
+    cbrt: new ParenFuncTokenType("cbrt(", "³√", 1, Math.cbrt),
+    sqrt: new ParenFuncTokenType("sqrt(", "√", 1, (x) => {
+        if (x < 0) throw new RangeError("Cannot take the square root of negative value");
+        else return Math.sqrt(x);
+    }),
+    log: new ParenFuncTokenType("log(", [1,2], (arg1, arg2) => {
+        if (arg2 === undefined) {
+            if (arg1 <= 0) throw new RangeError("Cannot take the log of a non-positive value");
+            return Math.log10(arg1);
+        } else {
+            if (arg1 == 1) throw new RangeError("Base of log cannot be 1");
+            if (arg1 <= 0) throw new RangeError("Base of log cannot be non-positive");
+            if (arg2 <= 0) throw new RangeError("Cannot take the log of a non-positive value");
+            return Math.log(arg2)/Math.log(arg1);
+        }
+    }),
+    tenExp: new ParenFuncTokenType("10^(", 1, (x) => Math.pow(10, x)),
+    ln: new ParenFuncTokenType("ln(", 1, (x) => {
+        if (x <= 0) throw new RangeError("Cannot take the ln of a non-positive value");
+        else return Math.log(x)
+    }),
+    eExp: new ParenFuncTokenType("e^(", 1, Math.exp),
+    sin: new ParenFuncTokenType("sin(", 1, (x) => {
+        // TODO
+        return Math.sin(x)
+    }),
+    asin: new ParenFuncTokenType("asin(", "sin^-1(", 1, Math.asin),
+    sinh: new ParenFuncTokenType("sinh(", 1, Math.sinh),
+    asinh: new ParenFuncTokenType("asinh(", "sinh^-1(", 1, Math.asinh),
+    cos: new ParenFuncTokenType("cos(", 1, Math.cos),
+    acos: new ParenFuncTokenType("acos(", "cos^-1(", 1, Math.acos),
+    cosh: new ParenFuncTokenType("cosh(", 1, Math.cosh),
+    acosh: new ParenFuncTokenType("acosh(", "cosh^-1(", 1, Math.acosh),
+    tan: new ParenFuncTokenType("tan(", 1, Math.tan),
+    atan: new ParenFuncTokenType("atan(", "tan^-1(", 1, Math.atan),
+    tanh: new ParenFuncTokenType("tanh(", 1, Math.tanh),
+    atanh: new ParenFuncTokenType("atanh(", "tanh^-1(", 1, Math.atanh),
+    // TODO
+    // polar: new ParenFuncTokenType("Pol(", 2, ),
+    // rect: new ParenFuncTokenType("Rec(", 2, ),
+    rnd: new ParenFuncTokenType("Rnd(", 1, Math.round),
+    abs: new ParenFuncTokenType("Abs(", 1, Math.abs),
+    openBracket: new ParenFuncTokenType("(", 1, (x) => x),
+};
+
 const expressionTokenTypes = {
     ...literalTokenTypes,
+    ...parenFuncTokenTypes,
 
     reciprocal: new TokenType("^-1", "⁻¹"),
     fact: new TokenType("!"),
 
     cube: new TokenType("^3", "³"),
-    cbrt: new TokenType("cbrt(", "³√"),
 
     frac: new TokenType("/", "┘"),
-
-    sqrt: new TokenType("sqrt(", "√"),
 
     square: new TokenType("^2", "²"),
 
@@ -43,11 +112,6 @@ const expressionTokenTypes = {
 
     root: new TokenType("rt(", "x√"),
 
-    log: new TokenType("log("),
-    tenExp: new TokenType("10^("),
-
-    ln: new TokenType("ln("),
-    eExp: new TokenType("e^("),
     e: new TokenType("e"),
 
     neg: new TokenType("neg", "-"),
@@ -59,26 +123,10 @@ const expressionTokenTypes = {
     varC: new TokenType("C"),
 
     varD: new TokenType("D"),
-    sin: new TokenType("sin"),
-    asin: new TokenType("asin", "sin^-1"),
-    sinh: new TokenType("sinh"),
-    asinh: new TokenType("asinh", "sinh^-1"),
 
-    cos: new TokenType("cos"),
-    acos: new TokenType("acos", "cos^-1"),
-    cosh: new TokenType("cosh"),
-    acosh: new TokenType("acosh", "cosh^-1"),
-
-    tan: new TokenType("tan"),
-    atan: new TokenType("atan", "tan^-1"),
-    tanh: new TokenType("tanh"),
-    atanh: new TokenType("atanh", "tanh^-1"),
-
-    openBracket: new TokenType("("),
     percentage: new TokenType("%"),
 
     closeBracket: new TokenType(")"),
-    abs: new TokenType("Abs("),
     varX: new TokenType("X"),
 
     comma: new TokenType(","),
@@ -95,11 +143,6 @@ const expressionTokenTypes = {
 
     permutation: new TokenType("Per", "𝐏"),
     combination: new TokenType("Com", "𝐂"),
-
-    polar: new TokenType("Pol("),
-    rect: new TokenType("Rec("),
-
-    rnd: new TokenType("Rnd("),
 
     ran: new TokenType("Ran#"),
 
@@ -146,7 +189,15 @@ const allTokenTypes = {
     ...programTokenTypes,
 };
 
-function throwRuntime(i: number, input: (Expression | Token)[], failedMessage: string): never {
+interface Expression {
+    tokens: Token[];
+
+    evaluate(): number;
+}
+
+type ExprTokenArr = (Expression | Token)[];
+
+function throwSyntax(i: number, input: ExprTokenArr, failedMessage: string): never {
     const token: Token = (() => {
         const j = (i >= input.length) ? input.length - 1 : i;
         const cur = input[j]!;
@@ -156,127 +207,407 @@ function throwRuntime(i: number, input: (Expression | Token)[], failedMessage: s
     const pos = (i >= tokens.length) ? token.sourceEnd : token.sourceStart;
     throw new RuntimeSyntaxError(pos, i, failedMessage);
 }
-
-interface Expression {
-    tokens: Token[];
-
-    evaluate(): number;
+function throwMath(i: number, tokens: Token[], failedMessage: string) {
+    const pos = (i >= tokens.length) ? tokens.at(-1)!.sourceEnd : tokens[i]!.sourceStart;
+    throw new RuntimeMathError(pos, i, failedMessage);
 }
 
-class LiteralExpression implements Expression {
+class ExprTokenArrIterator {
+    i: number = 0;
+    tokenList: Token[] = [];
+
     constructor(
-        public tokens: Token[],
-        public value: number,
+        public arr: ExprTokenArr
     ) {}
 
-    evaluate() {
-        return this.value;
+    cur(): Expression | Token | undefined {
+        return this.arr[this.i];
+    }
+    curAsToken(): Token {
+        if (this.isToken()) return this.cur() as Token;
+        throw new TypeError("curAsToken is called but cur is not a Token");
+    }
+    isInBound(): boolean {
+        return this.i >= 0 && this.i < this.arr.length;
+    }
+    isToken(): boolean {
+        return this.cur() instanceof Token;
     }
 
-    static replaceTokens(input: (Expression | Token)[]): (Expression | Token)[] {
-        function isInBound(i: number) {
-            return i >= 0 && i < tokens.length;
-        }
-        function isHandled(inputEl: Expression | Token): inputEl is Token {
-            return inputEl instanceof Token && Object.values(literalTokenTypes).includes(inputEl.type);
-        }
-        function isInputTypeNumber(inputEl: Expression | Token): inputEl is Token {
-            return isHandled(inputEl) && inputEl.type !== literalTokenTypes.exp && inputEl.type !== literalTokenTypes.dot;
-        }
-        function tokenToNumber(token: Token): number {
-            return parseInt(token.source);
-        }
-
-        const NEG_TYPE = [ allTokenTypes.minus, allTokenTypes.neg ];
-        const POS_TYPE = [ allTokenTypes.plus ];
-
-        const result: (Expression | Token)[] = [];
-        for (let i = 0; isInBound(i);) {
-            const cur: Expression | Token = input[i]!;
-            if (!isHandled(cur)) {
-                result.push(cur);
-                i++;
-                continue;
-            }
-
-            const tokensInExpr: Token[] = [];
-
-            function next(): void {
-                const inputEl = input[i];
-                if (!(inputEl instanceof Token)) throw new TypeError("Expect input[i] to be a Token");
-                tokensInExpr.push(inputEl);
-                ++i;
-            }
-
-            let significand = 0;
-            let exp = 0;
-
-            // ((xxxxx)(.xxxxxx))(E(-)xx)
-
-            if (cur.type === literalTokenTypes.exp) {
-                significand = 1;
-            }
-
-            for (; isInBound(i) && isInputTypeNumber(input[i]!); next()) {
-                significand = significand * 10 + tokenToNumber(input[i] as Token);
-            }
-            // Decimal point
-            if (isInBound(i) && isHandled(input[i]!) && (input[i] as Token).type === literalTokenTypes.dot) {
-                next();
-                for (let j = 1; isInBound(i) && isInputTypeNumber(input[i]!); next(), ++j) {
-                    significand += tokenToNumber(input[i] as Token) * Math.pow(10, -j);
-                }
-            }
-            // Exponent
-            if (isInBound(i) && isHandled(input[i]!) && (input[i] as Token).type === literalTokenTypes.exp) {
-                next();
-                
-                let sign = +1;
-                for (; isInBound(i) && input[i] instanceof Token; next()) {
-                    if (NEG_TYPE.includes((input[i] as Token).type)) sign *= -1;
-                    else if (POS_TYPE.includes((input[i] as Token).type)) {}
-                    else break;
-                }
-
-                if (!(isInBound(i) && isInputTypeNumber(input[i]!))) throwRuntime(i, input, "Missing number after exp");
-                exp = tokenToNumber(input[i] as Token);
-                next();
-
-                if (isInBound(i) && isInputTypeNumber(input[i]!)) {
-                    exp = exp * 10 + tokenToNumber(input[i] as Token);
-                    next();
-
-                    if (isInBound(i) && isInputTypeNumber(input[i]!)) throwRuntime(i, input, "Exponents cannot have more than 2 numbers");
-                }
-
-                exp *= sign;
-            }
-
-            if (isInBound(i) && isHandled(input[i]!) && (input[i] as Token).type === literalTokenTypes.dot)
-                throwRuntime(i, input, "Dot is not allowed in exponent or after another dot");
-            if (isInBound(i) && isHandled(input[i]!) && (input[i] as Token).type === literalTokenTypes.exp)
-                throwRuntime(i, input, "Literal cannot have more than one Exp");
-
-            const expr = new LiteralExpression(tokensInExpr, significand * Math.pow(10, exp));
-            result.push(expr);
-        }
-
-        return result;
+    resetTokenList() {
+        this.tokenList = [];
+    }
+    next() {
+        ++this.i;
+    }
+    nextSave() {
+        if (!this.isToken()) throw new TypeError("Expect iter.cur to be a Token");
+        this.tokenList.push(this.curAsToken());
+        ++this.i;
     }
 }
 
-function buildExpressionTree(input: (Expression | Token)[]) {
-    input = LiteralExpression.replaceTokens(input);
-    return input;
-    // replaceBracket; // with ^( and rt
-    // replacePriority2Suffix; // deg thing second and third thing cannot do (number)(suffix function)
-    // replaceFraction;
-    // replaceNegative;
-    // // statistical (x hat etc)
-    // replacePermCombAngle;
-    // addOmittedMultiplication;
-    // replaceMulDiv;
-    // replaceAddMin;
-    // replaceRelation;
-    // // logical operators
+// class TempExpression implements Expression {
+//     constructor(
+//         public tokens: Token[]
+//     ) {}
+
+//     evaluate(): number {
+//         throw new Error("unimplemented");
+//     }
+// }
+
+// class ParenFunctionExpression implements Expression {
+//     constructor(
+//         public tokens: Token[],
+//         public args: Expression[],
+//         public fn: (args: number[]) => number,
+//     ) {}
+
+//     evaluate() {
+//         const evalArgs = this.args.map((expr) => expr.evaluate());
+//         return this.fn(evalArgs);
+//     }
+
+//     static replaceTokens(input: ExprTokenArr) {
+//         const result: ExprTokenArr = [];
+//         for (let iter = new ExprTokenArrIterator(input); iter.isInBound(); ) {
+//             if (!(iter.isToken() && iter.curAsToken().type instanceof ParenFuncTokenType)) {
+//                 result.push(iter.cur()!);
+//                 iter.next();
+//                 continue;
+//             }
+
+//             const funcType = iter.curAsToken().type as ParenFuncTokenType;
+//             const tokensInFunc: Token[] = [iter.curAsToken()];
+//             let parenLevel = 0;
+//             let argI = 0;
+
+//             iter.next();
+//             iter.resetTokenList();
+//             while (iter.isInBound()) {
+//                 if (iter.cur() instanceof ParenFuncTokenType) ++parenLevel;
+//                 else if (iter.isToken() && iter.curAsToken().type === allTokenTypes.closeBracket) --parenLevel;
+//                 else if (parenLevel === 0 && iter.isToken() && iter.curAsToken().type === allTokenTypes.comma) {
+//                     ++argI;
+//                     if ((typeof funcType.argNum === "number" && argI === funcType.argNum) ||
+//                        (funcType.argNum instanceof Array && argI === Math.max(...funcType.argNum))) {
+//                         --parenLevel;
+//                     }
+//                 }
+//             }
+//         }
+//     }
+// }
+
+// function buildExpressionTree(input: ExprTokenArr) {
+//     input = LiteralExpression.replaceTokens(input);
+//     return new TempExpression(input as Token[]);
+//     // replaceBracket; // with ^( and rt
+//     // replacePriority2Suffix; // deg thing second and third thing cannot do (number)(suffix function)
+//     // replaceFraction;
+//     // replaceNegative;
+//     // // statistical (x hat etc)
+//     // replacePermCombAngle;
+//     // addOmittedMultiplication;
+//     // replaceMulDiv;
+//     // replaceAddMin;
+//     // replaceRelation;
+//     // // logical operators
+// }
+
+enum Precedence {
+    lowest = -999,
+    L1 = 1, //
+    L2,
+    L3,
+    /** Precedence of +, - */
+    L4,
+    /** Precedence of *, div */
+    L5,
+    /** Precedence of permutation, combination, angle */
+    L6,
+    /** Precedence of x hat, y hat etc */
+    L7,
+    /** Precedence of neg */
+    L8,
+    /** Precedence of frac */
+    L9,
+}
+
+function acceptLiteral(tokens: Token[], i: number): {
+    value: number,
+    newI: number,
+} {
+    function isInBound() {
+        return i >= 0 && i < tokens.length;
+    }
+    function isTokenNumber(token: Token): boolean {
+        return Object.values(literalTokenTypes).includes(token.type) && token.type !== literalTokenTypes.exp && token.type !== literalTokenTypes.dot;
+    }
+    function tokenToNumber(token: Token): number {
+        return parseInt(token.source);
+    }
+
+    const NEG_TYPE = [ allTokenTypes.minus, allTokenTypes.neg ];
+    const POS_TYPE = [ allTokenTypes.plus ];
+
+    let significand = 0;
+    let exp = 0;
+
+    // ((xxxxx)(.xxxxxx))(E(-)xx)
+
+    if (tokens[i]!.type === literalTokenTypes.exp) {
+        significand = 1;
+    }
+
+    for (; isInBound() && isTokenNumber(tokens[i]!); ++i) {
+        significand = significand * 10 + tokenToNumber(tokens[i]!);
+    }
+    // Decimal point
+    if (isInBound() && tokens[i]!.type === literalTokenTypes.dot) {
+        ++i;
+        for (let j = 1; isInBound() && isTokenNumber(tokens[i]!); ++i, ++j) {
+            significand += tokenToNumber(tokens[i]!) * Math.pow(10, -j);
+        }
+    }
+    // Exponent
+    if (isInBound() && tokens[i]!.type === literalTokenTypes.exp) {
+        ++i;
+
+        let sign = +1;
+        for (; isInBound(); ++i) {
+            if (NEG_TYPE.includes(tokens[i]!.type)) sign *= -1;
+            else if (POS_TYPE.includes(tokens[i]!.type)) {}
+            else break;
+        }
+
+        if (!(isInBound() && isTokenNumber(tokens[i]!))) throwSyntax(i, tokens, "Missing number after exp");
+        exp = tokenToNumber(tokens[i]!);
+        ++i;
+
+        if (isInBound() && isTokenNumber(tokens[i]!)) {
+            exp = exp * 10 + tokenToNumber(tokens[i]!);
+            ++i;
+
+            if (isInBound() && isTokenNumber(tokens[i]!)) throwSyntax(i, tokens, "Exponents cannot have more than 2 numbers");
+        }
+
+        exp *= sign;
+    }
+
+    if (isInBound() && tokens[i]!.type === literalTokenTypes.dot)
+        throwSyntax(i, tokens, "Dot is not allowed in exponent or after another dot");
+    if (isInBound() && tokens[i]!.type === literalTokenTypes.exp)
+        throwSyntax(i, tokens, "Literal cannot have more than one Exp");
+
+    return {
+        value: significand * Math.pow(10, exp),
+        newI: i-1,
+    };
+}
+
+function evaluateExpression(tokens: Token[]) {
+    // type EvalFn = (stack: EvalStack, i: number) => void;
+    // type EvalStack = (EvalFn | number)[];
+
+    // const evalStack: EvalStack = [];
+    type Command = (cs: CommandStack, ns: NumericStack, pre: Precedence) => boolean;
+    type CommandStack = {
+        tokenType: TokenType,
+        cmd: Command
+    }[];
+    type NumericStack = number[];
+
+    const commandStack: CommandStack = [];
+    const numericStack: NumericStack = [];
+
+    function evalUntil(errorI: number, precedence: Precedence) {
+        // while (evalStack.length !== 0) {
+        //     const top = evalStack.at(-1)!;
+        //     if (typeof top === "function") {
+        //         top(evalStack, evalStack.length - 1);
+        //     } else {
+        //         if (evalStack.length === 1) break;
+        //         const secondTop = evalStack.at(-2)!;
+        //         if (typeof secondTop === "function") {
+        //             secondTop(evalStack, evalStack.length - 2);
+        //         } else {
+        //             throw new Error("two numbers in a row in evalStack");
+        //         }
+        //     }
+        // }
+
+        try {
+            while (commandStack.length !== 0 && commandStack.at(-1)!.cmd(commandStack, numericStack, precedence));
+        } catch (err) {
+            if (err instanceof RangeError) {
+                throwMath(errorI, tokens, err.message);
+            } else {
+                throw err;
+            }
+        }
+    }
+
+    function unaryCommand(cmdPrecedence: Precedence, fn: (x: number) => number): Command {
+        return (cs, ns, pre) => {
+            if (pre > cmdPrecedence) return false;
+            if (ns.length === 0) throw new Error("Unary command expects at least one element in the numeric stack");
+            ns.push(fn(ns.pop()!));
+            cs.pop();
+            return true;
+        };
+    }
+    function binaryCommand(cmdPrecedence: Precedence, fn: (left: number, right: number) => number): Command {
+        return (cs, ns, pre) => {
+            if (pre > cmdPrecedence) return false;
+            if (ns.length < 2) throw new Error("Binary command expects >=2 elemens in the numeric stack");
+            const right = ns.pop()!;
+            const left = ns.pop()!;
+            ns.push(fn(left, right));
+            cs.pop();
+            return true;
+        };
+    }
+
+    let expectNumber = true;
+    for (let i = 0; i < tokens.length; ++i) {
+        const cur = tokens[i]!;
+        if (Object.values(literalTokenTypes).includes(cur.type)) {
+            if (!expectNumber) throwSyntax(i, tokens, "Unexpected number");
+            const {value, newI} = acceptLiteral(tokens, i);
+            numericStack.push(value);
+            i = newI;
+            expectNumber = false;
+
+        } else if (cur.type === allTokenTypes.plus) {
+            if (expectNumber) {
+                // nothing happens: more than 24 + does not cause STACK error
+                expectNumber = true;
+            } else {
+                evalUntil(i, Precedence.L4);
+                commandStack.push({
+                    tokenType: allTokenTypes.plus,
+                    cmd: binaryCommand(Precedence.L4, (left, right) => left + right),
+                });
+                expectNumber = true;
+            }
+
+        } else if (cur.type === allTokenTypes.minus || cur.type === allTokenTypes.neg) {
+            if (expectNumber) {
+                evalUntil(i, Precedence.L8);
+                commandStack.push({
+                    tokenType: allTokenTypes.neg,
+                    cmd: unaryCommand(Precedence.L8, (x) => -x),
+                });
+                expectNumber = true;
+            } else {
+                if (cur.type === allTokenTypes.neg) throwSyntax(i, tokens, "Negative sign cannot follow a number");
+                evalUntil(i, Precedence.L4);
+                commandStack.push({
+                    tokenType: allTokenTypes.minus,
+                    cmd: binaryCommand(Precedence.L4, (left, right) => left - right),
+                });
+                expectNumber = true;
+            }
+
+        } else if (cur.type === allTokenTypes.multiply || cur.type === allTokenTypes.divide) {
+            if (expectNumber) throwSyntax(i, tokens, "Expect number but found multiply or divide instead");
+            evalUntil(i, Precedence.L5);
+            const fn: (left: number, right: number) => number = (() => {
+                if (cur.type === allTokenTypes.multiply)
+                    return (l: number, r: number) => l*r;
+                else
+                    return (l: number, r: number) => {
+                        if (r === 0) throw new RangeError("Division by 0");
+                        return l/r;
+                    };
+            })();
+            commandStack.push({
+                tokenType: cur.type,
+                cmd: binaryCommand(Precedence.L5, fn),
+            });
+            expectNumber = true;
+
+        } else if (cur.type === allTokenTypes.permutation || cur.type === allTokenTypes.combination) {
+            if (expectNumber) throwSyntax(i, tokens, "Expect number but found permutation or combination instead");
+            evalUntil(i, Precedence.L6);
+            const isComb = cur.type === allTokenTypes.combination;
+            commandStack.push({
+                tokenType: cur.type,
+                cmd: binaryCommand(Precedence.L6, (n: number, r: number) => {
+                    if (!Number.isInteger(n) || !Number.isInteger(r)) throw new RangeError("n and r in nPr must be integer");
+                    if (!(0 <= r)) throw new RangeError("r cannot be negative in nPr");
+                    if (!(r <= n)) throw new RangeError("n must be no less than r in nPr");
+                    if (!(n < Math.pow(10, 10))) throw new RangeError("n must be less than 10^10 in nPr");
+
+                    let ans = 1;
+                    for (let k = 0; k < r; ++k) {
+                        ans *= n-k;
+                        if (isComb) ans /= k+1;
+                    }
+                    return ans;
+                }),
+            });
+            expectNumber = true;
+
+        } else if (cur.type === allTokenTypes.frac) {
+            if (expectNumber) throwSyntax(i, tokens, "Expect number but found frac instead");
+            evalUntil(i, Precedence.L9);
+            if (commandStack.length > 0 && commandStack.at(-1)!.tokenType === allTokenTypes.frac) {
+                if (commandStack.length > 1 && commandStack.at(-2)!.tokenType === allTokenTypes.frac) throwSyntax(i, tokens, "3 Frac not allowed");
+                commandStack.push({
+                    tokenType: cur.type,
+                    cmd: (cs, ns, pre) => {
+                        if (pre === Precedence.L9) throw new Error("what? i thought 3 fracs are thrown already");
+                        // Later frac evaluates first, then negative sign (L8), then this frac
+                        if (pre >= Precedence.L8) return false;
+                        if (ns.length < 3) throw new Error("Second frac command expects >=3 elements in the numeric stack");
+                        cs.pop();
+                        cs.pop();
+                        const den = ns.pop()!;
+                        const num = ns.pop()!;
+                        const int = ns.pop()!;
+                        if (den === 0) throw new RangeError("Division by 0");
+                        if (num === 0) ns.push(int);
+                        else if (int === 0) ns.push(num/den);
+                        else {
+                            const sign = Math.sign(den) * Math.sign(num) * Math.sign(int);
+                            const magnitude = Math.abs(int) + Math.abs(num) / Math.abs(den);
+                            ns.push(sign * magnitude);
+                        }
+                        return true;
+                    },
+                });
+            } else {
+                commandStack.push({
+                    tokenType: cur.type,
+                    cmd: (cs, ns, pre) => {
+                        // If another frac appears later (L9), this should not evaluate
+                        // Later frac evaluates first, then negative sign (L8), then this frac
+                        if (pre >= Precedence.L8) return false;
+                        if (ns.length < 2) throw new Error("Frac command expects >=2 elemens in the numeric stack");
+                        const den = ns.pop()!;
+                        const num = ns.pop()!;
+                        if (den === 0) throw new RangeError("Division by 0");
+                        ns.push(num / den);
+                        cs.pop();
+                        return true;
+                    },
+                });
+            }
+            expectNumber = true;
+
+        } else {
+            throw new Error("not supported token");
+        }
+
+        console.log(numericStack, commandStack);
+    }
+    if (expectNumber) {
+        throwSyntax(tokens.length, tokens, "Expect number");
+    }
+    evalUntil(tokens.length, Precedence.lowest);
+
+    return { numericStack, commandStack };
 }
