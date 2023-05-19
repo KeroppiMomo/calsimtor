@@ -76,7 +76,7 @@ const suffixFuncTokenTypes = {
         if (!Number.isInteger(x)) throw new RangeError("Cannot take the factorial of a non-integer");
         if (x < 0) throw new RangeError("Cannot take the factorial of a negative value");
         if (x > 69) throw new RangeError("Cannot take the factorial of an integer larger than 69 (too large)");
-        
+
         let ans = 1;
         for (let k = 2; k <= x; ++k) {
             ans *= k;
@@ -96,8 +96,8 @@ const suffixFuncTokenTypes = {
 };
 
 const parenFuncTokenTypes = {
-    cbrt: new ParenFuncTokenType("cbrt(", "³√", 1, Math.cbrt),
-    sqrt: new ParenFuncTokenType("sqrt(", "√", 1, (x) => {
+    cbrt: new ParenFuncTokenType("cbrt(", "³√(", 1, Math.cbrt),
+    sqrt: new ParenFuncTokenType("sqrt(", "√(", 1, (x) => {
         if (x < 0) throw new RangeError("Cannot take the square root of negative value");
         else return Math.sqrt(x);
     }),
@@ -235,6 +235,8 @@ function throwMath(i: number, tokens: Token[], failedMessage: string) {
 
 enum Precedence {
     lowest = -999,
+    comma = -2,
+    closeBracket = -1, // don't really know if the order matters
     L1 = 1, //
     L2,
     L3,
@@ -515,6 +517,47 @@ function evaluateExpression(tokens: Token[]) {
             evalUntil(i, Precedence.L10);
             expectNumber = false;
 
+        } else if (cur.type instanceof ParenFuncTokenType) {
+            if (!expectNumber) throwSyntax(i, tokens, "Unexpected parenthetical function");
+            const oriNSLen = numericStack.length;
+            const argNum = cur.type.argNum;
+            const maxArgNum = (typeof argNum === "number") ? argNum : Math.max(...argNum);
+            const fn = cur.type.fn;
+            commandStack.push({
+                tokenType: cur.type,
+                cmd: (cs, ns, pre) => {
+                    if (pre !== Precedence.comma && pre !== Precedence.closeBracket && pre !== Precedence.lowest) return false;
+
+                    const curArgNum = ns.length - oriNSLen;
+                    if (pre === Precedence.comma && curArgNum !== maxArgNum) return false;
+
+                    const isArgNumAcceptable = (typeof argNum === "number") ? (curArgNum === argNum) : argNum.includes(curArgNum);
+                    if ((pre === Precedence.closeBracket || Precedence.lowest) && !isArgNumAcceptable)
+                        throw new Error("Incorrect number of parenthetical function arguments");
+
+                    const args: number[] = [];
+                    for (let argI = 0; argI < curArgNum; ++argI) {
+                        args.push(ns.pop()!);
+                    }
+                    args.reverse();
+
+                    ns.push(fn(...args));
+                    cs.pop();
+
+                    return true;
+                },
+            });
+            expectNumber = true;
+        } else if (cur.type === allTokenTypes.comma) {
+            if (expectNumber) throwSyntax(i, tokens, "Expect number but found comma instead");
+            evalUntil(i, Precedence.comma);
+            if (commandStack.length === 0 || !(commandStack.at(-1)!.tokenType instanceof ParenFuncTokenType))
+                throwSyntax(i, tokens, "Found comma at top level");
+            expectNumber = true;
+        } else if (cur.type === allTokenTypes.closeBracket) {
+            if (expectNumber) throwSyntax(i, tokens, "Expect number but found close bracket instead");
+            evalUntil(i, Precedence.closeBracket);
+            expectNumber = false;
         } else {
             throw new Error("not supported token");
         }
