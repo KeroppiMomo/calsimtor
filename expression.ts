@@ -189,132 +189,14 @@ const allTokenTypes = {
     ...programTokenTypes,
 };
 
-interface Expression {
-    tokens: Token[];
-
-    evaluate(): number;
-}
-
-type ExprTokenArr = (Expression | Token)[];
-
-function throwSyntax(i: number, input: ExprTokenArr, failedMessage: string): never {
-    const token: Token = (() => {
-        const j = (i >= input.length) ? input.length - 1 : i;
-        const cur = input[j]!;
-        if (cur instanceof Token) return cur;
-        else return cur.tokens[0]!;
-    })();
-    const pos = (i >= tokens.length) ? token.sourceEnd : token.sourceStart;
+function throwSyntax(i: number, tokens: Token[], failedMessage: string): never {
+    const pos = (i >= tokens.length) ? tokens.at(-1)!.sourceEnd : tokens[i]!.sourceStart;
     throw new RuntimeSyntaxError(pos, i, failedMessage);
 }
 function throwMath(i: number, tokens: Token[], failedMessage: string) {
     const pos = (i >= tokens.length) ? tokens.at(-1)!.sourceEnd : tokens[i]!.sourceStart;
     throw new RuntimeMathError(pos, i, failedMessage);
 }
-
-class ExprTokenArrIterator {
-    i: number = 0;
-    tokenList: Token[] = [];
-
-    constructor(
-        public arr: ExprTokenArr
-    ) {}
-
-    cur(): Expression | Token | undefined {
-        return this.arr[this.i];
-    }
-    curAsToken(): Token {
-        if (this.isToken()) return this.cur() as Token;
-        throw new TypeError("curAsToken is called but cur is not a Token");
-    }
-    isInBound(): boolean {
-        return this.i >= 0 && this.i < this.arr.length;
-    }
-    isToken(): boolean {
-        return this.cur() instanceof Token;
-    }
-
-    resetTokenList() {
-        this.tokenList = [];
-    }
-    next() {
-        ++this.i;
-    }
-    nextSave() {
-        if (!this.isToken()) throw new TypeError("Expect iter.cur to be a Token");
-        this.tokenList.push(this.curAsToken());
-        ++this.i;
-    }
-}
-
-// class TempExpression implements Expression {
-//     constructor(
-//         public tokens: Token[]
-//     ) {}
-
-//     evaluate(): number {
-//         throw new Error("unimplemented");
-//     }
-// }
-
-// class ParenFunctionExpression implements Expression {
-//     constructor(
-//         public tokens: Token[],
-//         public args: Expression[],
-//         public fn: (args: number[]) => number,
-//     ) {}
-
-//     evaluate() {
-//         const evalArgs = this.args.map((expr) => expr.evaluate());
-//         return this.fn(evalArgs);
-//     }
-
-//     static replaceTokens(input: ExprTokenArr) {
-//         const result: ExprTokenArr = [];
-//         for (let iter = new ExprTokenArrIterator(input); iter.isInBound(); ) {
-//             if (!(iter.isToken() && iter.curAsToken().type instanceof ParenFuncTokenType)) {
-//                 result.push(iter.cur()!);
-//                 iter.next();
-//                 continue;
-//             }
-
-//             const funcType = iter.curAsToken().type as ParenFuncTokenType;
-//             const tokensInFunc: Token[] = [iter.curAsToken()];
-//             let parenLevel = 0;
-//             let argI = 0;
-
-//             iter.next();
-//             iter.resetTokenList();
-//             while (iter.isInBound()) {
-//                 if (iter.cur() instanceof ParenFuncTokenType) ++parenLevel;
-//                 else if (iter.isToken() && iter.curAsToken().type === allTokenTypes.closeBracket) --parenLevel;
-//                 else if (parenLevel === 0 && iter.isToken() && iter.curAsToken().type === allTokenTypes.comma) {
-//                     ++argI;
-//                     if ((typeof funcType.argNum === "number" && argI === funcType.argNum) ||
-//                        (funcType.argNum instanceof Array && argI === Math.max(...funcType.argNum))) {
-//                         --parenLevel;
-//                     }
-//                 }
-//             }
-//         }
-//     }
-// }
-
-// function buildExpressionTree(input: ExprTokenArr) {
-//     input = LiteralExpression.replaceTokens(input);
-//     return new TempExpression(input as Token[]);
-//     // replaceBracket; // with ^( and rt
-//     // replacePriority2Suffix; // deg thing second and third thing cannot do (number)(suffix function)
-//     // replaceFraction;
-//     // replaceNegative;
-//     // // statistical (x hat etc)
-//     // replacePermCombAngle;
-//     // addOmittedMultiplication;
-//     // replaceMulDiv;
-//     // replaceAddMin;
-//     // replaceRelation;
-//     // // logical operators
-// }
 
 enum Precedence {
     lowest = -999,
@@ -408,10 +290,6 @@ function acceptLiteral(tokens: Token[], i: number): {
 }
 
 function evaluateExpression(tokens: Token[]) {
-    // type EvalFn = (stack: EvalStack, i: number) => void;
-    // type EvalStack = (EvalFn | number)[];
-
-    // const evalStack: EvalStack = [];
     type Command = (cs: CommandStack, ns: NumericStack, pre: Precedence) => boolean;
     type CommandStack = {
         tokenType: TokenType,
@@ -423,21 +301,6 @@ function evaluateExpression(tokens: Token[]) {
     const numericStack: NumericStack = [];
 
     function evalUntil(errorI: number, precedence: Precedence) {
-        // while (evalStack.length !== 0) {
-        //     const top = evalStack.at(-1)!;
-        //     if (typeof top === "function") {
-        //         top(evalStack, evalStack.length - 1);
-        //     } else {
-        //         if (evalStack.length === 1) break;
-        //         const secondTop = evalStack.at(-2)!;
-        //         if (typeof secondTop === "function") {
-        //             secondTop(evalStack, evalStack.length - 2);
-        //         } else {
-        //             throw new Error("two numbers in a row in evalStack");
-        //         }
-        //     }
-        // }
-
         try {
             while (commandStack.length !== 0 && commandStack.at(-1)!.cmd(commandStack, numericStack, precedence));
         } catch (err) {
