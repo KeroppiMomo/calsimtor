@@ -8,6 +8,24 @@ class TokenType {
     }
 }
 
+class SuffixFuncTokenType extends TokenType {
+    fn: (x: number) => number;
+
+    constructor(source: string, shown: string, fn: (x: number) => number);
+    constructor(source: string, fn: (x: number) => number);
+    constructor(source: string, arg1: string | ((x: number) => number), arg2?: (x: number) => number) {
+        if (arg2 !== undefined) {
+            // 1st definiiton
+            const shown = arg1 as string;
+            super(source, shown);
+            this.fn = arg2;
+        } else {
+            // 2nd definition
+            super(source, undefined);
+            this.fn = arg1 as (x: number) => number;
+        }
+    }
+}
 
 type ParenFuncArgNum = number | number[];
 type ParenFunc = (...args: number[]) => number;
@@ -47,6 +65,34 @@ const literalTokenTypes = {
 
     exp: new TokenType("E"),
     dot: new TokenType("."),
+};
+
+const suffixFuncTokenTypes = {
+    reciprocal: new SuffixFuncTokenType("^-1", "⁻¹", (x) => {
+        if (x === 0) throw new RangeError("Division by 0");
+        return 1/x;
+    }),
+    fact: new SuffixFuncTokenType("!", (x) => {
+        if (!Number.isInteger(x)) throw new RangeError("Cannot take the factorial of a non-integer");
+        if (x < 0) throw new RangeError("Cannot take the factorial of a negative value");
+        if (x > 69) throw new RangeError("Cannot take the factorial of an integer larger than 69 (too large)");
+        
+        let ans = 1;
+        for (let k = 2; k <= x; ++k) {
+            ans *= k;
+        }
+        return ans;
+    }),
+
+    cube: new SuffixFuncTokenType("^3", "³", (x) => Math.pow(x,3)),
+
+    square: new SuffixFuncTokenType("^2", "²", (x) => Math.pow(x,2)),
+
+    percentage: new SuffixFuncTokenType("%", (x) => x/100),
+
+    // asD: new TokenType("asD", "°"),
+    // asR: new TokenType("asR", "ʳ"),
+    // asG: new TokenType("asG", "ᵍ"),
 };
 
 const parenFuncTokenTypes = {
@@ -97,16 +143,10 @@ const parenFuncTokenTypes = {
 
 const expressionTokenTypes = {
     ...literalTokenTypes,
+    ...suffixFuncTokenTypes,
     ...parenFuncTokenTypes,
 
-    reciprocal: new TokenType("^-1", "⁻¹"),
-    fact: new TokenType("!"),
-
-    cube: new TokenType("^3", "³"),
-
     frac: new TokenType("/", "┘"),
-
-    square: new TokenType("^2", "²"),
 
     power: new TokenType("^("),
 
@@ -123,8 +163,6 @@ const expressionTokenTypes = {
     varC: new TokenType("C"),
 
     varD: new TokenType("D"),
-
-    percentage: new TokenType("%"),
 
     closeBracket: new TokenType(")"),
     varX: new TokenType("X"),
@@ -149,9 +187,6 @@ const expressionTokenTypes = {
     pi: new TokenType("pi", "π"),
 
     ans: new TokenType("Ans"),
-    asD: new TokenType("asD", "°"),
-    asR: new TokenType("asR", "ʳ"),
-    asG: new TokenType("asG", "ᵍ"),
 };
 
 
@@ -215,6 +250,8 @@ enum Precedence {
     L8,
     /** Precedence of frac */
     L9,
+    /** Precedence of suffix functions */
+    L10,
 }
 
 function acceptLiteral(tokens: Token[], i: number): {
@@ -460,6 +497,23 @@ function evaluateExpression(tokens: Token[]) {
                 });
             }
             expectNumber = true;
+
+        } else if (cur.type instanceof SuffixFuncTokenType) {
+            if (expectNumber) throwSyntax(i, tokens, "Expect number but found suffix function instead");
+            const fn = (cur.type as SuffixFuncTokenType).fn;
+            commandStack.push({
+                tokenType: cur.type,
+                cmd: (cs, ns, pre) => {
+                    if (pre > Precedence.L10) return false; // delete this?
+                    if (ns.length === 0) throw new Error("Suffix function command expects >=1 elements in the numeric stack");
+                    const x = ns.pop()!;
+                    ns.push(fn(x));
+                    cs.pop();
+                    return true;
+                },
+            });
+            evalUntil(i, Precedence.L10);
+            expectNumber = false;
 
         } else {
             throw new Error("not supported token");
