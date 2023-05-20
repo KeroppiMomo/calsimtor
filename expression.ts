@@ -8,12 +8,15 @@ class TokenType {
     }
 }
 
-class SuffixFuncTokenType extends TokenType {
-    fn: (x: number) => number;
+type ThrowMsg = (msg: string) => never;
 
-    constructor(source: string, shown: string, fn: (x: number) => number);
-    constructor(source: string, fn: (x: number) => number);
-    constructor(source: string, arg1: string | ((x: number) => number), arg2?: (x: number) => number) {
+type SuffixFunc = (throwMath: ThrowMsg, x: number) => number;
+class SuffixFuncTokenType extends TokenType {
+    fn: SuffixFunc;
+
+    constructor(source: string, shown: string, fn: SuffixFunc);
+    constructor(source: string, fn: SuffixFunc);
+    constructor(source: string, arg1: string | SuffixFunc, arg2?: SuffixFunc) {
         if (arg2 !== undefined) {
             // 1st definiiton
             const shown = arg1 as string;
@@ -22,13 +25,13 @@ class SuffixFuncTokenType extends TokenType {
         } else {
             // 2nd definition
             super(source, undefined);
-            this.fn = arg1 as (x: number) => number;
+            this.fn = arg1 as SuffixFunc;
         }
     }
 }
 
 type ParenFuncArgNum = number | number[];
-type ParenFunc = (...args: number[]) => number;
+type ParenFunc = (throwMath: ThrowMsg, ...args: number[]) => number;
 class ParenFuncTokenType extends TokenType {
     argNum: ParenFuncArgNum;
     fn: ParenFunc;
@@ -68,14 +71,14 @@ const literalTokenTypes = {
 };
 
 const suffixFuncTokenTypes = {
-    reciprocal: new SuffixFuncTokenType("^-1", "⁻¹", (x) => {
-        if (x === 0) throw new RangeError("Division by 0");
+    reciprocal: new SuffixFuncTokenType("^-1", "⁻¹", (throwMath, x) => {
+        if (x === 0) throwMath("Division by 0");
         return 1/x;
     }),
-    fact: new SuffixFuncTokenType("!", (x) => {
-        if (!Number.isInteger(x)) throw new RangeError("Cannot take the factorial of a non-integer");
-        if (x < 0) throw new RangeError("Cannot take the factorial of a negative value");
-        if (x > 69) throw new RangeError("Cannot take the factorial of an integer larger than 69 (too large)");
+    fact: new SuffixFuncTokenType("!", (throwMath, x) => {
+        if (!Number.isInteger(x)) throwMath("Cannot take the factorial of a non-integer");
+        if (x < 0) throwMath("Cannot take the factorial of a negative value");
+        if (x > 69) throwMath("Cannot take the factorial of an integer larger than 69 (too large)");
 
         let ans = 1;
         for (let k = 2; k <= x; ++k) {
@@ -84,11 +87,11 @@ const suffixFuncTokenTypes = {
         return ans;
     }),
 
-    cube: new SuffixFuncTokenType("^3", "³", (x) => Math.pow(x,3)),
+    cube: new SuffixFuncTokenType("^3", "³", (_, x) => Math.pow(x,3)),
 
-    square: new SuffixFuncTokenType("^2", "²", (x) => Math.pow(x,2)),
+    square: new SuffixFuncTokenType("^2", "²", (_, x) => Math.pow(x,2)),
 
-    percentage: new SuffixFuncTokenType("%", (x) => x/100),
+    percentage: new SuffixFuncTokenType("%", (_, x) => x/100),
 
     // asD: new TokenType("asD", "°"),
     // asR: new TokenType("asR", "ʳ"),
@@ -96,49 +99,53 @@ const suffixFuncTokenTypes = {
 };
 
 const parenFuncTokenTypes = {
-    cbrt: new ParenFuncTokenType("cbrt(", "³√(", 1, Math.cbrt),
-    sqrt: new ParenFuncTokenType("sqrt(", "√(", 1, (x) => {
-        if (x < 0) throw new RangeError("Cannot take the square root of negative value");
-        else return Math.sqrt(x);
+    cbrt: new ParenFuncTokenType("cbrt(", "³√(", 1, (_, x) => Math.cbrt(x)),
+    sqrt: new ParenFuncTokenType("sqrt(", "√(", 1, (throwMath, x) => {
+        if (x < 0) throwMath("Cannot take the square root of negative value");
+        return Math.sqrt(x);
     }),
-    log: new ParenFuncTokenType("log(", [1,2], (arg1, arg2) => {
+    log: new ParenFuncTokenType("log(", [1,2], (throwMath, arg1, arg2) => {
         if (arg2 === undefined) {
-            if (arg1 <= 0) throw new RangeError("Cannot take the log of a non-positive value");
+            if (arg1 <= 0) throwMath("Cannot take the log of a non-positive value");
             return Math.log10(arg1);
         } else {
-            if (arg1 == 1) throw new RangeError("Base of log cannot be 1");
-            if (arg1 <= 0) throw new RangeError("Base of log cannot be non-positive");
-            if (arg2 <= 0) throw new RangeError("Cannot take the log of a non-positive value");
+            if (arg1 == 1) throwMath("Base of log cannot be 1");
+            if (arg1 <= 0) throwMath("Base of log cannot be non-positive");
+            if (arg2 <= 0) throwMath("Cannot take the log of a non-positive value");
             return Math.log(arg2)/Math.log(arg1);
         }
     }),
-    tenExp: new ParenFuncTokenType("10^(", 1, (x) => Math.pow(10, x)),
-    ln: new ParenFuncTokenType("ln(", 1, (x) => {
-        if (x <= 0) throw new RangeError("Cannot take the ln of a non-positive value");
-        else return Math.log(x)
+    tenExp: new ParenFuncTokenType("10^(", 1, (_, x) => Math.pow(10, x)),
+    ln: new ParenFuncTokenType("ln(", 1, (throwMath, x) => {
+        if (x <= 0) throwMath("Cannot take the ln of a non-positive value");
+        return Math.log(x)
     }),
-    eExp: new ParenFuncTokenType("e^(", 1, Math.exp),
-    sin: new ParenFuncTokenType("sin(", 1, (x) => {
+    eExp: new ParenFuncTokenType("e^(", 1, (_, x) => Math.exp(x)),
+    sin: new ParenFuncTokenType("sin(", 1, (_, x) => {
         // TODO
         return Math.sin(x)
     }),
-    asin: new ParenFuncTokenType("asin(", "sin^-1(", 1, Math.asin),
-    sinh: new ParenFuncTokenType("sinh(", 1, Math.sinh),
-    asinh: new ParenFuncTokenType("asinh(", "sinh^-1(", 1, Math.asinh),
-    cos: new ParenFuncTokenType("cos(", 1, Math.cos),
-    acos: new ParenFuncTokenType("acos(", "cos^-1(", 1, Math.acos),
-    cosh: new ParenFuncTokenType("cosh(", 1, Math.cosh),
-    acosh: new ParenFuncTokenType("acosh(", "cosh^-1(", 1, Math.acosh),
-    tan: new ParenFuncTokenType("tan(", 1, Math.tan),
-    atan: new ParenFuncTokenType("atan(", "tan^-1(", 1, Math.atan),
-    tanh: new ParenFuncTokenType("tanh(", 1, Math.tanh),
-    atanh: new ParenFuncTokenType("atanh(", "tanh^-1(", 1, Math.atanh),
+    asin: new ParenFuncTokenType("asin(", "sin^-1(", 1, (_, x) => Math.asin(x)),
+    sinh: new ParenFuncTokenType("sinh(", 1, (_, x) => Math.sinh(x)),
+    asinh: new ParenFuncTokenType("asinh(", "sinh^-1(", 1, (_, x) => Math.asinh(x)),
+    cos: new ParenFuncTokenType("cos(", 1, (_, x) => Math.cos(x)),
+    acos: new ParenFuncTokenType("acos(", "cos^-1(", 1, (_, x) => Math.acos(x)),
+    cosh: new ParenFuncTokenType("cosh(", 1, (_, x) => Math.cosh(x)),
+    acosh: new ParenFuncTokenType("acosh(", "cosh^-1(", 1, (_, x) => Math.acosh(x)),
+    tan: new ParenFuncTokenType("tan(", 1, (_, x) => Math.tan(x)),
+    atan: new ParenFuncTokenType("atan(", "tan^-1(", 1, (_, x) => Math.atan(x)),
+    tanh: new ParenFuncTokenType("tanh(", 1, (_, x) => Math.tanh(x)),
+    atanh: new ParenFuncTokenType("atanh(", "tanh^-1(", 1, (_, x) => Math.atanh(x)),
     // TODO
-    // polar: new ParenFuncTokenType("Pol(", 2, ),
-    // rect: new ParenFuncTokenType("Rec(", 2, ),
-    rnd: new ParenFuncTokenType("Rnd(", 1, Math.round),
-    abs: new ParenFuncTokenType("Abs(", 1, Math.abs),
-    openBracket: new ParenFuncTokenType("(", 1, (x) => x),
+    polar: new ParenFuncTokenType("Pol(", 2, (_, x, y) => {
+        return Math.sqrt(x*x + y*y);
+    }),
+    rect: new ParenFuncTokenType("Rec(", 2, (_, r, theta) => {
+        return r*Math.cos(theta);
+    }),
+    rnd: new ParenFuncTokenType("Rnd(", 1, (_, x) => Math.round(x)),
+    abs: new ParenFuncTokenType("Abs(", 1, (_, x) => Math.abs(x)),
+    openBracket: new ParenFuncTokenType("(", 1, (_, x) => x),
 };
 
 const expressionTokenTypes = {
@@ -228,7 +235,7 @@ function throwSyntax(i: number, tokens: Token[], failedMessage: string): never {
     const pos = (i >= tokens.length) ? tokens.at(-1)!.sourceEnd : tokens[i]!.sourceStart;
     throw new RuntimeSyntaxError(pos, i, failedMessage);
 }
-function throwMath(i: number, tokens: Token[], failedMessage: string) {
+function throwMath(i: number, tokens: Token[], failedMessage: string): never {
     const pos = (i >= tokens.length) ? tokens.at(-1)!.sourceEnd : tokens[i]!.sourceStart;
     throw new RuntimeMathError(pos, i, failedMessage);
 }
@@ -329,7 +336,7 @@ function acceptLiteral(tokens: Token[], i: number): {
 }
 
 function evaluateExpression(tokens: Token[]) {
-    type Command = (cs: CommandStack, ns: NumericStack, pre: Precedence) => boolean;
+    type Command = (cs: CommandStack, ns: NumericStack, pre: Precedence, throwSyntax: (message: string) => never, throwMath: (message: string) => never) => boolean;
     type CommandStack = {
         tokenType: TokenType,
         cmd: Command
@@ -340,33 +347,31 @@ function evaluateExpression(tokens: Token[]) {
     const numericStack: NumericStack = [];
 
     function evalUntil(errorI: number, precedence: Precedence) {
-        try {
-            while (commandStack.length !== 0 && commandStack.at(-1)!.cmd(commandStack, numericStack, precedence));
-        } catch (err) {
-            if (err instanceof RangeError) {
-                throwMath(errorI, tokens, err.message);
-            } else {
-                throw err;
-            }
-        }
+        while (commandStack.length !== 0 && commandStack.at(-1)!.cmd(
+            commandStack,
+            numericStack,
+            precedence,
+            (msg) => throwSyntax(errorI, tokens, msg),
+            (msg) => throwMath(errorI, tokens, msg),
+        ));
     }
 
-    function unaryCommand(cmdPrecedence: Precedence, fn: (x: number) => number): Command {
-        return (cs, ns, pre) => {
+    function unaryCommand(cmdPrecedence: Precedence, fn: (throwSyntax: ThrowMsg, throwMath: ThrowMsg, x: number) => number): Command {
+        return (cs, ns, pre, throwSyntax, throwMath) => {
             if (pre > cmdPrecedence) return false;
             if (ns.length === 0) throw new Error("Unary command expects at least one element in the numeric stack");
-            ns.push(fn(ns.pop()!));
+            ns.push(fn(throwSyntax, throwMath, ns.pop()!));
             cs.pop();
             return true;
         };
     }
-    function binaryCommand(cmdPrecedence: Precedence, fn: (left: number, right: number) => number): Command {
-        return (cs, ns, pre) => {
+    function binaryCommand(cmdPrecedence: Precedence, fn: (throwSyntax: ThrowMsg, throwMath: ThrowMsg, left: number, right: number) => number): Command {
+        return (cs, ns, pre, throwSyntax, throwMath) => {
             if (pre > cmdPrecedence) return false;
             if (ns.length < 2) throw new Error("Binary command expects >=2 elemens in the numeric stack");
             const right = ns.pop()!;
             const left = ns.pop()!;
-            ns.push(fn(left, right));
+            ns.push(fn(throwSyntax, throwMath, left, right));
             cs.pop();
             return true;
         };
@@ -390,7 +395,7 @@ function evaluateExpression(tokens: Token[]) {
                 evalUntil(i, Precedence.L4);
                 commandStack.push({
                     tokenType: allTokenTypes.plus,
-                    cmd: binaryCommand(Precedence.L4, (left, right) => left + right),
+                    cmd: binaryCommand(Precedence.L4, (_, __, left, right) => left + right),
                 });
                 expectNumber = true;
             }
@@ -400,7 +405,7 @@ function evaluateExpression(tokens: Token[]) {
                 evalUntil(i, Precedence.L8);
                 commandStack.push({
                     tokenType: allTokenTypes.neg,
-                    cmd: unaryCommand(Precedence.L8, (x) => -x),
+                    cmd: unaryCommand(Precedence.L8, (_, __, x) => -x),
                 });
                 expectNumber = true;
             } else {
@@ -408,7 +413,7 @@ function evaluateExpression(tokens: Token[]) {
                 evalUntil(i, Precedence.L4);
                 commandStack.push({
                     tokenType: allTokenTypes.minus,
-                    cmd: binaryCommand(Precedence.L4, (left, right) => left - right),
+                    cmd: binaryCommand(Precedence.L4, (_, __, left, right) => left - right),
                 });
                 expectNumber = true;
             }
@@ -416,12 +421,12 @@ function evaluateExpression(tokens: Token[]) {
         } else if (cur.type === allTokenTypes.multiply || cur.type === allTokenTypes.divide) {
             if (expectNumber) throwSyntax(i, tokens, "Expect number but found multiply or divide instead");
             evalUntil(i, Precedence.L5);
-            const fn: (left: number, right: number) => number = (() => {
+            const fn: (_: ThrowMsg, throwMath: ThrowMsg, left: number, right: number) => number = (() => {
                 if (cur.type === allTokenTypes.multiply)
-                    return (l: number, r: number) => l*r;
+                    return (_: ThrowMsg, __: ThrowMsg, l: number, r: number) => l*r;
                 else
-                    return (l: number, r: number) => {
-                        if (r === 0) throw new RangeError("Division by 0");
+                    return (_: ThrowMsg, throwMath: ThrowMsg, l: number, r: number) => {
+                        if (r === 0) throwMath("Division by 0");
                         return l/r;
                     };
             })();
@@ -437,11 +442,11 @@ function evaluateExpression(tokens: Token[]) {
             const isComb = cur.type === allTokenTypes.combination;
             commandStack.push({
                 tokenType: cur.type,
-                cmd: binaryCommand(Precedence.L6, (n: number, r: number) => {
-                    if (!Number.isInteger(n) || !Number.isInteger(r)) throw new RangeError("n and r in nPr must be integer");
-                    if (!(0 <= r)) throw new RangeError("r cannot be negative in nPr");
-                    if (!(r <= n)) throw new RangeError("n must be no less than r in nPr");
-                    if (!(n < Math.pow(10, 10))) throw new RangeError("n must be less than 10^10 in nPr");
+                cmd: binaryCommand(Precedence.L6, (_, throwMath: ThrowMsg, n: number, r: number) => {
+                    if (!Number.isInteger(n) || !Number.isInteger(r)) throwMath("n and r in nPr must be integer");
+                    if (!(0 <= r)) throwMath("r cannot be negative in nPr");
+                    if (!(r <= n)) throwMath("n must be no less than r in nPr");
+                    if (!(n < Math.pow(10, 10))) throwMath("n must be less than 10^10 in nPr");
 
                     let ans = 1;
                     for (let k = 0; k < r; ++k) {
@@ -460,7 +465,7 @@ function evaluateExpression(tokens: Token[]) {
                 if (commandStack.length > 1 && commandStack.at(-2)!.tokenType === allTokenTypes.frac) throwSyntax(i, tokens, "3 Frac not allowed");
                 commandStack.push({
                     tokenType: cur.type,
-                    cmd: (cs, ns, pre) => {
+                    cmd: (cs, ns, pre, _, throwMath) => {
                         if (pre === Precedence.L9) throw new Error("what? i thought 3 fracs are thrown already");
                         // Later frac evaluates first, then negative sign (L8), then this frac
                         if (pre >= Precedence.L8) return false;
@@ -470,7 +475,7 @@ function evaluateExpression(tokens: Token[]) {
                         const den = ns.pop()!;
                         const num = ns.pop()!;
                         const int = ns.pop()!;
-                        if (den === 0) throw new RangeError("Division by 0");
+                        if (den === 0) throwMath("Division by 0");
                         if (num === 0) ns.push(int);
                         else if (int === 0) ns.push(num/den);
                         else {
@@ -484,14 +489,14 @@ function evaluateExpression(tokens: Token[]) {
             } else {
                 commandStack.push({
                     tokenType: cur.type,
-                    cmd: (cs, ns, pre) => {
+                    cmd: (cs, ns, pre, _, throwMath) => {
                         // If another frac appears later (L9), this should not evaluate
                         // Later frac evaluates first, then negative sign (L8), then this frac
                         if (pre >= Precedence.L8) return false;
                         if (ns.length < 2) throw new Error("Frac command expects >=2 elemens in the numeric stack");
                         const den = ns.pop()!;
                         const num = ns.pop()!;
-                        if (den === 0) throw new RangeError("Division by 0");
+                        if (den === 0) throwMath("Division by 0");
                         ns.push(num / den);
                         cs.pop();
                         return true;
@@ -505,11 +510,11 @@ function evaluateExpression(tokens: Token[]) {
             const fn = (cur.type as SuffixFuncTokenType).fn;
             commandStack.push({
                 tokenType: cur.type,
-                cmd: (cs, ns, pre) => {
+                cmd: (cs, ns, pre, _, throwMath) => {
                     if (pre > Precedence.L10) return false; // delete this?
                     if (ns.length === 0) throw new Error("Suffix function command expects >=1 elements in the numeric stack");
                     const x = ns.pop()!;
-                    ns.push(fn(x));
+                    ns.push(fn(throwMath, x));
                     cs.pop();
                     return true;
                 },
@@ -525,7 +530,7 @@ function evaluateExpression(tokens: Token[]) {
             const fn = cur.type.fn;
             commandStack.push({
                 tokenType: cur.type,
-                cmd: (cs, ns, pre) => {
+                cmd: (cs, ns, pre, throwSyntax, throwMath) => {
                     if (pre !== Precedence.comma && pre !== Precedence.closeBracket && pre !== Precedence.lowest) return false;
 
                     const curArgNum = ns.length - oriNSLen;
@@ -533,7 +538,7 @@ function evaluateExpression(tokens: Token[]) {
 
                     const isArgNumAcceptable = (typeof argNum === "number") ? (curArgNum === argNum) : argNum.includes(curArgNum);
                     if ((pre === Precedence.closeBracket || Precedence.lowest) && !isArgNumAcceptable)
-                        throw new Error("Incorrect number of parenthetical function arguments");
+                        throwSyntax("Incorrect number of parenthetical function arguments");
 
                     const args: number[] = [];
                     for (let argI = 0; argI < curArgNum; ++argI) {
@@ -541,7 +546,7 @@ function evaluateExpression(tokens: Token[]) {
                     }
                     args.reverse();
 
-                    ns.push(fn(...args));
+                    ns.push(fn(throwMath, ...args));
                     cs.pop();
 
                     return true;
