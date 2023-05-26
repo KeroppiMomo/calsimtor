@@ -339,10 +339,12 @@ enum Precedence {
     L11,
 }
 
-function acceptLiteral(tokens: Token[], i: number): {
+type AcceptLiteralResult = {
     value: number,
     newI: number,
-} {
+};
+
+function acceptLiteral(tokens: Token[], i: number): AcceptLiteralResult {
     function isInBound() {
         return i >= 0 && i < tokens.length;
     }
@@ -411,16 +413,17 @@ function acceptLiteral(tokens: Token[], i: number): {
     };
 }
 
+/**
+ * returns whether to propagate further in the stack
+ */
+type Command = (cs: CommandStack, ns: NumericStack, pre: Precedence, throwSyntax: (message: string) => never, throwMath: (message: string) => never) => boolean;
+type CommandStack = {
+    tokenType: TokenType | null,
+    cmd: Command
+}[];
+type NumericStack = number[];
+
 function evaluateExpression(tokens: Token[]) {
-    /**
-     * returns whether to propagate further in the stack
-     */
-    type Command = (cs: CommandStack, ns: NumericStack, pre: Precedence, throwSyntax: (message: string) => never, throwMath: (message: string) => never) => boolean;
-    type CommandStack = {
-        tokenType: TokenType | null,
-        cmd: Command
-    }[];
-    type NumericStack = number[];
 
     const commandStack: CommandStack = [];
     const numericStack: NumericStack = [];
@@ -464,6 +467,64 @@ function evaluateExpression(tokens: Token[]) {
             const {value, newI} = acceptLiteral(tokens, i);
             numericStack.push(value);
             i = newI;
+            expectNumber = false;
+
+        } else if (cur.type === allTokenTypes.deg) {
+            if (expectNumber) throwSyntax(i, tokens, "Expect number but found degree");
+            evalUntil(i, Precedence.L11);
+
+            function isInBound() {
+                return i >= 0 && i < tokens.length;
+            }
+
+            /**
+             * returns whether to continue accepting
+             */
+            function acceptOnePart(): boolean {
+                i++;
+                if (!(isInBound())) {
+                    i--;
+                    evalUntil(i, Precedence.L11);
+                    return false;
+                }
+                if (tokens[i]!.type === allTokenTypes.deg) throwSyntax(i, tokens, "Not allowed two consecutive degree");
+                if (!Object.values(literalTokenTypes).includes(tokens[i]!.type)) {
+                    i--;
+                    evalUntil(i, Precedence.L11);
+                    return false;
+                }
+
+                commandStack.push({
+                    tokenType: allTokenTypes.deg,
+                    cmd: (cs, ns, _, __, ___) => {
+                        cs.pop();
+                        if (ns.length < 2) throw new Error("Degree command expects >=2 elements in the numeric stack");
+                        const last = ns.pop()!;
+                        const first = ns.pop()!;
+                        ns.push(first + last/60);
+                        return true;
+                    },
+                });
+
+                const {value, newI} = acceptLiteral(tokens, i);
+                numericStack.push(value);
+                i = newI + 1;
+                if (!(isInBound() && tokens[i]!.type === allTokenTypes.deg))
+                    throwSyntax(i, tokens, "Expect degree symbol after degree then number literal");
+
+                return true;
+            }
+
+            if (!acceptOnePart()) continue;
+            if (!acceptOnePart()) continue;
+
+            i++;
+            if (isInBound() && Object.values(literalTokenTypes).includes(tokens[i]!.type))
+                throwSyntax(i, tokens, "Number literal cannot exist after a maximum of 3 degree symbols");
+            if (isInBound() && tokens[i]!.type === allTokenTypes.deg) throwSyntax(i, tokens, "Not allowed two consecutive degree");
+            i--;
+            evalUntil(i, Precedence.L11);
+
             expectNumber = false;
 
         } else if (cur.type instanceof ValuedTokenType) {
