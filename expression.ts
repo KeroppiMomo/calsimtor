@@ -8,6 +8,28 @@ class TokenType {
     }
 }
 
+type ValuedFunc = () => number;
+class ValuedTokenType extends TokenType {
+    fn: ValuedFunc;
+
+    constructor(source: string, shown: string, fn: number);
+    constructor(source: string, fn: number);
+    constructor(source: string, shown: string, fn: ValuedFunc);
+    constructor(source: string, fn: ValuedFunc);
+    constructor(source: string, arg1: string | ValuedFunc | number, arg2?: ValuedFunc | number) {
+        if (arg2 !== undefined) {
+            // 1st definiiton
+            const shown = arg1 as string;
+            super(source, shown);
+            this.fn = (typeof arg2 === "number") ? (() => arg2) : arg2;
+        } else {
+            // 2nd definition
+            super(source, undefined);
+            this.fn = (typeof arg1 === "number") ? (() => arg1) : (arg1 as ValuedFunc);
+        }
+    }
+}
+
 type ThrowMsg = (msg: string) => never;
 
 type SuffixFunc = (throwMath: ThrowMsg, x: number) => number;
@@ -68,6 +90,63 @@ const literalTokenTypes = {
 
     exp: new TokenType("E"),
     dot: new TokenType("."),
+};
+
+const valuedTokenTypes = {
+    pi: new ValuedTokenType("pi", "π", Math.PI),
+    e: new ValuedTokenType("e", Math.E),
+
+    ran: new ValuedTokenType("Ran#", () => Math.floor(Math.random() * 1000) / 1000),
+
+    massProton: new ValuedTokenType("mp", "m_p", 1.672_621_777e-27),
+    massNeutron: new ValuedTokenType("mn", "m_n", 1.674_927_351e-27),
+    massElectron: new ValuedTokenType("me", "m_e", 9.109_382_91e-31),
+    massMuon: new ValuedTokenType("mmu", "m_μ", 1.883_531_475e-28),
+
+    bohrRadius: new ValuedTokenType("a0", "a_0", 5.291_772_109_2e-11),
+    planckConst: new ValuedTokenType("h", 6.626_069_57e-34),
+    nuclearMagneton: new ValuedTokenType("muN", "μ_N", 5.050_783_53e-27),
+    bohrMagneton: new ValuedTokenType("muB", "μ_B", 9.274_009_68e-24),
+
+    reducedPlankConst: new ValuedTokenType("hbar", "ħ", 1.054_571_726e-34),
+    fineStructureConst: new ValuedTokenType("alpha", "α", 7.297_352_569_8e-3),
+    classicalElectronRadius: new ValuedTokenType("re", "r_e", 2.817_940_326_7e-15),
+    comptonWavelength: new ValuedTokenType("lambdap", "λ_c", 2.426_310_238_9e-12),
+
+    protonGyromagnticRatio: new ValuedTokenType("gammap", "γ_p", 2.675_222_005e-8),
+    protonComptonWavelength: new ValuedTokenType("lambdacp", "λ_cp", 1.321_409_856_23e-15),
+    neutronComptonWavelength: new ValuedTokenType("lambdacn", "λ_cn", 1.319_590_906_8e-15),
+    RydbergConst: new ValuedTokenType("Rinf", "R_∞", 1.097_373_156_853_9e7),
+
+    atomicUnitConst: new ValuedTokenType("u", 1.660_538_921e-27),
+    protonMagneticMoment: new ValuedTokenType("mup", "μ_p", 1.410_606_743e-26),
+    electronMagneticMoment: new ValuedTokenType("mue", "μ_e", -9.284_764_3e-24),
+    neutronMagneticMoment: new ValuedTokenType("mun", "μ_n", -9.662_364_7e-27),
+
+    muonMagneticMoment: new ValuedTokenType("mumu", "μ_μ", -9.662_364_7e-27),
+    faradayConst: new ValuedTokenType("F", 96_485.336_5),
+    elementaryCharge: new ValuedTokenType("eC", "𝑒", 1.602_176_565e-19), // e in Coloumb, that's the best way i could think of to distinguish from Euler constant
+    avogadroConst: new ValuedTokenType("NA", "N_A", 6.022_141_29e23),
+
+    boltzmannConst: new ValuedTokenType("k", 1.380_648_8e-23),
+    idealGasMolarVolume: new ValuedTokenType("Vm", "V_m", 0.022_710_953),
+    molarGasConst: new ValuedTokenType("R", 8.314_462_1),
+    vacuumLightSpeed: new ValuedTokenType("c0", "c_0", 299_792_458),
+
+    firstRadiationConst: new ValuedTokenType("c1", "c_1", 3.741_771_53e-16),
+    secondRadiationConst: new ValuedTokenType("c2", "c_2", 0.014_387_77),
+    stefanBoltzmannConst: new ValuedTokenType("sigma", "σ", 5.670_373e-8),
+    electricConst: new ValuedTokenType("epsilon0", "ε_0", 8.854_187_817e-12),
+
+    magneticConst: new ValuedTokenType("mu0", "μ_0", 1.256_637_061_4e-6),
+    magneticFluxQuantum: new ValuedTokenType("phi0", "phi_0", 2.067_833_758e-15),
+    gravitationalAccel: new ValuedTokenType("g", 9.806_65),
+    conductanceQuantum: new ValuedTokenType("G0", "G_0", 7.748_091_734_6e-5),
+
+    characteristicVacuumImpedance: new ValuedTokenType("Z0", "Z_0", 376.730_313_461),
+    celsiusTemperature: new ValuedTokenType("t", 273.15),
+    gravitationalConst: new ValuedTokenType("G", 6.673_84e-11),
+    atmosphere: new ValuedTokenType("atm", 101_325),
 };
 
 const suffixFuncTokenTypes = {
@@ -150,6 +229,7 @@ const parenFuncTokenTypes = {
 
 const expressionTokenTypes = {
     ...literalTokenTypes,
+    ...valuedTokenTypes,
     ...suffixFuncTokenTypes,
     ...parenFuncTokenTypes,
 
@@ -158,8 +238,6 @@ const expressionTokenTypes = {
     power: new TokenType("^("),
 
     root: new TokenType("rt(", "x√"),
-
-    e: new TokenType("e"),
 
     neg: new TokenType("neg", "-"),
     varA: new TokenType("A"),
@@ -188,10 +266,6 @@ const expressionTokenTypes = {
 
     permutation: new TokenType("Per", "𝐏"),
     combination: new TokenType("Com", "𝐂"),
-
-    ran: new TokenType("Ran#"),
-
-    pi: new TokenType("pi", "π"),
 
     ans: new TokenType("Ans"),
 };
@@ -253,14 +327,16 @@ enum Precedence {
     L5,
     /** Precedence of permutation, combination, angle */
     L6,
-    /** Precedence of x hat, y hat etc */
+    /** Precedence of omitted multiplication */
     L7,
-    /** Precedence of neg */
+    /** Precedence of x hat, y hat etc */
     L8,
-    /** Precedence of frac */
+    /** Precedence of neg */
     L9,
-    /** Precedence of suffix functions */
+    /** Precedence of frac */
     L10,
+    /** Precedence of suffix functions */
+    L11,
 }
 
 function acceptLiteral(tokens: Token[], i: number): {
@@ -338,7 +414,7 @@ function acceptLiteral(tokens: Token[], i: number): {
 function evaluateExpression(tokens: Token[]) {
     type Command = (cs: CommandStack, ns: NumericStack, pre: Precedence, throwSyntax: (message: string) => never, throwMath: (message: string) => never) => boolean;
     type CommandStack = {
-        tokenType: TokenType,
+        tokenType: TokenType | null,
         cmd: Command
     }[];
     type NumericStack = number[];
@@ -387,6 +463,17 @@ function evaluateExpression(tokens: Token[]) {
             i = newI;
             expectNumber = false;
 
+        } else if (cur.type instanceof ValuedTokenType) {
+            if (!expectNumber) {
+                evalUntil(i, Precedence.L7);
+                commandStack.push({
+                    tokenType: null,
+                    cmd: binaryCommand(Precedence.L7, (_, __, l, r) => l*r),
+                });
+            }
+            numericStack.push(cur.type.fn());
+            expectNumber = false;
+
         } else if (cur.type === allTokenTypes.plus) {
             if (expectNumber) {
                 // nothing happens: more than 24 + does not cause STACK error
@@ -402,10 +489,10 @@ function evaluateExpression(tokens: Token[]) {
 
         } else if (cur.type === allTokenTypes.minus || cur.type === allTokenTypes.neg) {
             if (expectNumber) {
-                evalUntil(i, Precedence.L8);
+                evalUntil(i, Precedence.L9);
                 commandStack.push({
                     tokenType: allTokenTypes.neg,
-                    cmd: unaryCommand(Precedence.L8, (_, __, x) => -x),
+                    cmd: unaryCommand(Precedence.L9, (_, __, x) => -x),
                 });
                 expectNumber = true;
             } else {
@@ -460,15 +547,15 @@ function evaluateExpression(tokens: Token[]) {
 
         } else if (cur.type === allTokenTypes.frac) {
             if (expectNumber) throwSyntax(i, tokens, "Expect number but found frac instead");
-            evalUntil(i, Precedence.L9);
+            evalUntil(i, Precedence.L10);
             if (commandStack.length > 0 && commandStack.at(-1)!.tokenType === allTokenTypes.frac) {
                 if (commandStack.length > 1 && commandStack.at(-2)!.tokenType === allTokenTypes.frac) throwSyntax(i, tokens, "3 Frac not allowed");
                 commandStack.push({
                     tokenType: cur.type,
                     cmd: (cs, ns, pre, _, throwMath) => {
-                        if (pre === Precedence.L9) throw new Error("what? i thought 3 fracs are thrown already");
+                        if (pre === Precedence.L10) throw new Error("what? i thought 3 fracs are thrown already");
                         // Later frac evaluates first, then negative sign (L8), then this frac
-                        if (pre >= Precedence.L8) return false;
+                        if (pre >= Precedence.L9) return false;
                         if (ns.length < 3) throw new Error("Second frac command expects >=3 elements in the numeric stack");
                         cs.pop();
                         cs.pop();
@@ -492,7 +579,7 @@ function evaluateExpression(tokens: Token[]) {
                     cmd: (cs, ns, pre, _, throwMath) => {
                         // If another frac appears later (L9), this should not evaluate
                         // Later frac evaluates first, then negative sign (L8), then this frac
-                        if (pre >= Precedence.L8) return false;
+                        if (pre >= Precedence.L9) return false;
                         if (ns.length < 2) throw new Error("Frac command expects >=2 elemens in the numeric stack");
                         const den = ns.pop()!;
                         const num = ns.pop()!;
@@ -511,7 +598,7 @@ function evaluateExpression(tokens: Token[]) {
             commandStack.push({
                 tokenType: cur.type,
                 cmd: (cs, ns, pre, _, throwMath) => {
-                    if (pre > Precedence.L10) return false; // delete this?
+                    if (pre > Precedence.L11) return false; // delete this?
                     if (ns.length === 0) throw new Error("Suffix function command expects >=1 elements in the numeric stack");
                     const x = ns.pop()!;
                     ns.push(fn(throwMath, x));
@@ -519,11 +606,17 @@ function evaluateExpression(tokens: Token[]) {
                     return true;
                 },
             });
-            evalUntil(i, Precedence.L10);
+            evalUntil(i, Precedence.L11);
             expectNumber = false;
 
         } else if (cur.type instanceof ParenFuncTokenType) {
-            if (!expectNumber) throwSyntax(i, tokens, "Unexpected parenthetical function");
+            if (!expectNumber) {
+                evalUntil(i, Precedence.L7);
+                commandStack.push({
+                    tokenType: null,
+                    cmd: binaryCommand(Precedence.L7, (_, __, l, r) => l*r),
+                });
+            }
             const oriNSLen = numericStack.length;
             const argNum = cur.type.argNum;
             const maxArgNum = (typeof argNum === "number") ? argNum : Math.max(...argNum);
