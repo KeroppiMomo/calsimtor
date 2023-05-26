@@ -412,6 +412,9 @@ function acceptLiteral(tokens: Token[], i: number): {
 }
 
 function evaluateExpression(tokens: Token[]) {
+    /**
+     * returns whether to propagate further in the stack
+     */
     type Command = (cs: CommandStack, ns: NumericStack, pre: Precedence, throwSyntax: (message: string) => never, throwMath: (message: string) => never) => boolean;
     type CommandStack = {
         tokenType: TokenType | null,
@@ -642,6 +645,8 @@ function evaluateExpression(tokens: Token[]) {
                     ns.push(fn(throwMath, ...args));
                     cs.pop();
 
+                    if (pre === Precedence.closeBracket) return false;
+
                     return true;
                 },
             });
@@ -654,6 +659,7 @@ function evaluateExpression(tokens: Token[]) {
             expectNumber = true;
         } else if (cur.type === allTokenTypes.closeBracket) {
             if (expectNumber) throwSyntax(i, tokens, "Expect number but found close bracket instead");
+            if (!commandStack.some((cmdEl) => cmdEl.tokenType instanceof ParenFuncTokenType)) throwSyntax(i, tokens, "Found close bracket at top level");
             evalUntil(i, Precedence.closeBracket);
             expectNumber = false;
         } else {
