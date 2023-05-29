@@ -206,6 +206,7 @@ function evaluateExpression(tokens: Token[]) {
 
                 const value = acceptLiteral(iter);
                 evalStacks.numeric.push(value);
+                iter.next();
                 if (!(iter.isInBound() && iter.cur()!.type === allTokenTypes.deg))
                     throwSyntax(iter, "Expect degree symbol after degree then number literal");
 
