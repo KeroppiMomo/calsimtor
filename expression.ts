@@ -425,12 +425,15 @@ function evaluateExpression(tokens: Token[]) {
             throw new Error("not supported token");
         }
 
-        console.log(evalStacks.numeric, evalStacks.command);
+        // console.log(evalStacks.numeric, evalStacks.command);
     }
     if (expectNumber) {
         throwSyntax(iter, "Expect number");
     }
     evalStacks.evalUntil(iter, Precedence.lowest);
 
-    return evalStacks;
+    if (evalStacks.command.length !== 0) throw new Error("Expect the command stack to be empty after eval until lowest precedence");
+    if (evalStacks.numeric.length !== 1) throw new Error("Expect the numeric stack to have exactly one element after eval until lowest precedence");
+
+    return evalStacks.numeric[0]!;
 }
