@@ -93,8 +93,8 @@ const literalTokenTypes = {
 };
 
 const valuedTokenTypes = {
-    pi: new ValuedTokenType("pi", "π", Math.PI),
-    e: new ValuedTokenType("e", Math.E),
+    pi: new ValuedTokenType("pi", "π", 3.141_592_653_589_8),
+    e: new ValuedTokenType("e", 2.718_281_828_459_04),
 
     ran: new ValuedTokenType("Ran#", () => Math.floor(Math.random() * 1000) / 1000),
 
