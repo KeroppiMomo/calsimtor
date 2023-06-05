@@ -30,6 +30,7 @@ class RuntimeError {
 }
 class RuntimeSyntaxError extends RuntimeError {}
 class RuntimeMathError extends RuntimeError {}
+class RuntimeStackError extends RuntimeError {}
 
 class Variable {
     static all = {
