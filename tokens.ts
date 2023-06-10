@@ -8,7 +8,7 @@ class TokenType {
     }
 }
 
-type ValuedFunc = () => number;
+type ValuedFunc = (context: Context) => number;
 class ValuedTokenType extends TokenType {
     fn: ValuedFunc;
 
@@ -32,7 +32,7 @@ class ValuedTokenType extends TokenType {
 
 type ThrowMsg = (msg: string) => never;
 
-type SuffixFunc = (throwMath: ThrowMsg, x: number) => number;
+type SuffixFunc = (throwMath: ThrowMsg, context: Context, x: number) => number;
 class SuffixFuncTokenType extends TokenType {
     fn: SuffixFunc;
 
@@ -52,26 +52,43 @@ class SuffixFuncTokenType extends TokenType {
     }
 }
 
-type ParenFuncArgNum = number | number[];
-type ParenFunc = (throwMath: ThrowMsg, ...args: number[]) => number;
-class ParenFuncTokenType extends TokenType {
-    argNum: ParenFuncArgNum;
-    fn: ParenFunc;
+type ArrayOfLength<T, N extends number, Arr extends T[] = []> =
+    Arr["length"] extends N
+    ? Arr | (N extends Arr["length"]
+        ? never
+        : ArrayOfLength<T, Exclude<N, Arr["length"]>>
+    ) : ArrayOfLength<T, N, [T, ...Arr]>
 
-    constructor(source: string, shown: string, argNum: ParenFuncArgNum, fn: ParenFunc);
-    constructor(source: string, argNum: ParenFuncArgNum, fn: ParenFunc);
-    constructor(source: string, arg1: string | ParenFuncArgNum, arg2: ParenFuncArgNum | ParenFunc, arg3?: ParenFunc) {
+type ParenFuncArgNum = number | number[];
+type ParenFunc<ArgNum extends ParenFuncArgNum> =
+    ArgNum extends number[]
+    ? ParenFunc<ArgNum[number]>
+    : (ArgNum extends number
+       // @ts-expect-error:
+       // Typescript complains that this may be infinitely deep. I'm deferring the error when this type is actually used.
+        ? (throwMath: ThrowMsg, context: Context, ...args: ArrayOfLength<number, ArgNum>) => number
+        : never);
+
+class ParenFuncTokenType<ArgNum extends ParenFuncArgNum> extends TokenType {
+    argNum: ArgNum;
+    fn: ParenFunc<ArgNum>;
+
+   // @ts-expect-error:
+   // Typescript complains that this may be infinitely deep. I'm deferring the error when this type is actually used.
+    constructor(source: string, shown: string, argNum: ArgNum, fn: ParenFunc<ArgNum>);
+    constructor(source: string, argNum: ArgNum, fn: ParenFunc<ArgNum>);
+    constructor(source: string, arg1: string | ParenFuncArgNum, arg2: ParenFuncArgNum | ParenFunc<ArgNum>, arg3?: ParenFunc<ArgNum>) {
         if (arg3 !== undefined) {
             // 1st definiton
             const shown = arg1 as string;
             super(source, shown);
-            this.argNum = arg2 as ParenFuncArgNum;
+            this.argNum = arg2 as ArgNum;
             this.fn = arg3;
         } else {
             // 2nd definition
             super(source, undefined);
-            this.argNum = arg1 as ParenFuncArgNum;
-            this.fn = arg2 as ParenFunc;
+            this.argNum = arg1 as ArgNum;
+            this.fn = arg2 as ParenFunc<ArgNum>;
         }
     }
 }
@@ -150,11 +167,11 @@ const valuedTokenTypes = {
 };
 
 const suffixFuncTokenTypes = {
-    reciprocal: new SuffixFuncTokenType("^-1", "⁻¹", (throwMath, x) => {
+    reciprocal: new SuffixFuncTokenType("^-1", "⁻¹", (throwMath, _, x) => {
         if (x === 0) throwMath("Division by 0");
         return 1/x;
     }),
-    fact: new SuffixFuncTokenType("!", (throwMath, x) => {
+    fact: new SuffixFuncTokenType("!", (throwMath, _, x) => {
         if (!Number.isInteger(x)) throwMath("Cannot take the factorial of a non-integer");
         if (x < 0) throwMath("Cannot take the factorial of a negative value");
         if (x > 69) throwMath("Cannot take the factorial of an integer larger than 69 (too large)");
@@ -166,11 +183,11 @@ const suffixFuncTokenTypes = {
         return ans;
     }),
 
-    cube: new SuffixFuncTokenType("^3", "³", (_, x) => Math.pow(x,3)),
+    cube: new SuffixFuncTokenType("^3", "³", (_, __, x) => Math.pow(x,3)),
 
-    square: new SuffixFuncTokenType("^2", "²", (_, x) => Math.pow(x,2)),
+    square: new SuffixFuncTokenType("^2", "²", (_, __, x) => Math.pow(x,2)),
 
-    percentage: new SuffixFuncTokenType("%", (_, x) => x/100),
+    percentage: new SuffixFuncTokenType("%", (_, __, x) => x/100),
 
     // asD: new TokenType("asD", "°"),
     // asR: new TokenType("asR", "ʳ"),
@@ -178,53 +195,53 @@ const suffixFuncTokenTypes = {
 };
 
 const parenFuncTokenTypes = {
-    cbrt: new ParenFuncTokenType("cbrt(", "³√(", 1, (_, x) => Math.cbrt(x)),
-    sqrt: new ParenFuncTokenType("sqrt(", "√(", 1, (throwMath, x) => {
+    cbrt: new ParenFuncTokenType("cbrt(", "³√(", 1, (_, __, x) => Math.cbrt(x)),
+    sqrt: new ParenFuncTokenType("sqrt(", "√(", 1, (throwMath, _, x) => {
         if (x < 0) throwMath("Cannot take the square root of negative value");
         return Math.sqrt(x);
     }),
-    log: new ParenFuncTokenType("log(", [1,2], (throwMath, arg1, arg2) => {
-        if (arg2 === undefined) {
-            if (arg1 <= 0) throwMath("Cannot take the log of a non-positive value");
-            return Math.log10(arg1);
-        } else {
-            if (arg1 == 1) throwMath("Base of log cannot be 1");
-            if (arg1 <= 0) throwMath("Base of log cannot be non-positive");
+    log: new ParenFuncTokenType<[1,2]>("log(", [1,2], (throwMath: ThrowMsg, _: Context, arg2: number, arg3?: number) => {
+        if (arg3 === undefined) {
             if (arg2 <= 0) throwMath("Cannot take the log of a non-positive value");
-            return Math.log(arg2)/Math.log(arg1);
+            return Math.log10(arg2);
+        } else {
+            if (arg2 == 1) throwMath("Base of log cannot be 1");
+            if (arg2 <= 0) throwMath("Base of log cannot be non-positive");
+            if (arg3 <= 0) throwMath("Cannot take the log of a non-positive value");
+            return Math.log(arg3)/Math.log(arg2);
         }
     }),
-    tenExp: new ParenFuncTokenType("10^(", 1, (_, x) => Math.pow(10, x)),
-    ln: new ParenFuncTokenType("ln(", 1, (throwMath, x) => {
+    tenExp: new ParenFuncTokenType("10^(", 1, (_, __, x) => Math.pow(10, x)),
+    ln: new ParenFuncTokenType("ln(", 1, (throwMath, _, x) => {
         if (x <= 0) throwMath("Cannot take the ln of a non-positive value");
         return Math.log(x)
     }),
-    eExp: new ParenFuncTokenType("e^(", 1, (_, x) => Math.exp(x)),
-    sin: new ParenFuncTokenType("sin(", 1, (_, x) => {
+    eExp: new ParenFuncTokenType("e^(", 1, (_, __, x) => Math.exp(x)),
+    sin: new ParenFuncTokenType("sin(", 1, (_, __, x) => {
         // TODO
         return Math.sin(x)
     }),
-    asin: new ParenFuncTokenType("asin(", "sin^-1(", 1, (_, x) => Math.asin(x)),
-    sinh: new ParenFuncTokenType("sinh(", 1, (_, x) => Math.sinh(x)),
-    asinh: new ParenFuncTokenType("asinh(", "sinh^-1(", 1, (_, x) => Math.asinh(x)),
-    cos: new ParenFuncTokenType("cos(", 1, (_, x) => Math.cos(x)),
-    acos: new ParenFuncTokenType("acos(", "cos^-1(", 1, (_, x) => Math.acos(x)),
-    cosh: new ParenFuncTokenType("cosh(", 1, (_, x) => Math.cosh(x)),
-    acosh: new ParenFuncTokenType("acosh(", "cosh^-1(", 1, (_, x) => Math.acosh(x)),
-    tan: new ParenFuncTokenType("tan(", 1, (_, x) => Math.tan(x)),
-    atan: new ParenFuncTokenType("atan(", "tan^-1(", 1, (_, x) => Math.atan(x)),
-    tanh: new ParenFuncTokenType("tanh(", 1, (_, x) => Math.tanh(x)),
-    atanh: new ParenFuncTokenType("atanh(", "tanh^-1(", 1, (_, x) => Math.atanh(x)),
+    asin: new ParenFuncTokenType("asin(", "sin^-1(", 1, (_, __, x) => Math.asin(x)),
+    sinh: new ParenFuncTokenType("sinh(", 1, (_, __, x) => Math.sinh(x)),
+    asinh: new ParenFuncTokenType("asinh(", "sinh^-1(", 1, (_, __, x) => Math.asinh(x)),
+    cos: new ParenFuncTokenType("cos(", 1, (_, __, x) => Math.cos(x)),
+    acos: new ParenFuncTokenType("acos(", "cos^-1(", 1, (_, __, x) => Math.acos(x)),
+    cosh: new ParenFuncTokenType("cosh(", 1, (_, __, x) => Math.cosh(x)),
+    acosh: new ParenFuncTokenType("acosh(", "cosh^-1(", 1, (_, __, x) => Math.acosh(x)),
+    tan: new ParenFuncTokenType("tan(", 1, (_, __, x) => Math.tan(x)),
+    atan: new ParenFuncTokenType("atan(", "tan^-1(", 1, (_, __, x) => Math.atan(x)),
+    tanh: new ParenFuncTokenType("tanh(", 1, (_, __, x) => Math.tanh(x)),
+    atanh: new ParenFuncTokenType("atanh(", "tanh^-1(", 1, (_, __, x) => Math.atanh(x)),
     // TODO
-    polar: new ParenFuncTokenType("Pol(", 2, (_, x, y) => {
+    polar: new ParenFuncTokenType("Pol(", 2, (_, __, x, y) => {
         return Math.sqrt(x*x + y*y);
     }),
-    rect: new ParenFuncTokenType("Rec(", 2, (_, r, theta) => {
+    rect: new ParenFuncTokenType("Rec(", 2, (_, __, r, theta) => {
         return r*Math.cos(theta);
     }),
-    rnd: new ParenFuncTokenType("Rnd(", 1, (_, x) => Math.round(x)),
-    abs: new ParenFuncTokenType("Abs(", 1, (_, x) => Math.abs(x)),
-    openBracket: new ParenFuncTokenType("(", 1, (_, x) => x),
+    rnd: new ParenFuncTokenType("Rnd(", 1, (_, __, x) => Math.round(x)),
+    abs: new ParenFuncTokenType("Abs(", 1, (_, __, x) => Math.abs(x)),
+    openBracket: new ParenFuncTokenType("(", 1, (_, __, x) => x),
 };
 
 const expressionTokenTypes = {

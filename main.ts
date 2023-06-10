@@ -21,12 +21,14 @@ class Token {
     ) {}
 }
 
-class RuntimeError {
+class RuntimeError extends Error {
     constructor(
         public sourcePos: SourcePosition,
         public tokenI: number,
-        public message: string,
-    ) {}
+        message: string,
+    ) {
+        super(message);
+    }
 }
 class RuntimeSyntaxError extends RuntimeError {}
 class RuntimeMathError extends RuntimeError {}

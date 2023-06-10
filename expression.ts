@@ -1,11 +1,8 @@
-function throwSyntax(iter: TokenIterator, failedMessage: string): never {
+function throwRuntime(ErrorClass: typeof RuntimeError, iter: TokenIterator, failedMessage: string): never {
     const pos = iter.isInBound() ? iter.cur()!.sourceStart : iter.last()!.sourceEnd;
-    throw new RuntimeSyntaxError(pos, iter.i, failedMessage);
+    throw new ErrorClass(pos, iter.i, failedMessage);
 }
-function throwMath(iter: TokenIterator, failedMessage: string): never {
-    const pos = iter.isInBound() ? iter.cur()!.sourceStart : iter.last()!.sourceEnd;
-    throw new RuntimeMathError(pos, iter.i, failedMessage);
-}
+type ThrowLocalRuntime = (ErrorClass: typeof RuntimeError, failedMessage: string) => never;
 
 enum Precedence {
     lowest = -999,
@@ -86,7 +83,7 @@ function acceptLiteral(iter: TokenIterator): number {
             else break;
         }
 
-        if (!(iter.isInBound() && isTokenNumber(iter.cur()!))) throwSyntax(iter, "Missing number after exp");
+        if (!(iter.isInBound() && isTokenNumber(iter.cur()!))) throwRuntime(RuntimeSyntaxError, iter, "Missing number after exp");
         exp = tokenToNumber(iter.cur()!);
         iter.next();
 
@@ -94,16 +91,16 @@ function acceptLiteral(iter: TokenIterator): number {
             exp = exp * 10 + tokenToNumber(iter.cur()!);
             iter.next();
 
-            if (iter.isInBound() && isTokenNumber(iter.cur()!)) throwSyntax(iter, "Exponents cannot have more than 2 numbers");
+            if (iter.isInBound() && isTokenNumber(iter.cur()!)) throwRuntime(RuntimeSyntaxError, iter, "Exponents cannot have more than 2 numbers");
         }
 
         exp *= sign;
     }
 
     if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.dot)
-        throwSyntax(iter, "Dot is not allowed in exponent or after another dot");
+        throwRuntime(RuntimeSyntaxError, iter, "Dot is not allowed in exponent or after another dot");
     if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.exp)
-        throwSyntax(iter, "Literal cannot have more than one Exp");
+        throwRuntime(RuntimeSyntaxError, iter, "Literal cannot have more than one Exp");
 
     iter.prev();
     return significand * Math.pow(10, exp);
@@ -157,32 +154,39 @@ class LengthLimitedStack<T> {
     }
 }
 
+type EvalContext = {
+    evalStacks: EvalStacks,
+    iter: TokenIterator,
+    context: Context,
+};
+
 /**
  * returns whether to propagate further in the stack
  */
-type Command = (st: EvalStacks, pre: Precedence, throwSyntax: (message: string) => never, throwMath: (message: string) => never) => boolean;
+type Command = (evalContext: EvalContext, pre: Precedence, throwRuntime: ThrowLocalRuntime) => boolean;
 type CommandStackElement = {
     tokenType: TokenType | null,
     cmd: Command
 };
 
-function unaryCommand(cmdPrecedence: Precedence, fn: (throwSyntax: ThrowMsg, throwMath: ThrowMsg, x: number) => number): Command {
-    return (st, pre, throwSyntax, throwMath) => {
+type UnaryFunction = (x: number, throwRuntime: ThrowLocalRuntime, context: Context) => number;
+function unaryCommand(cmdPrecedence: Precedence, fn: UnaryFunction): Command {
+    return ({ evalStacks: st, context }: EvalContext, pre: Precedence, throwRuntime: ThrowLocalRuntime) => {
         if (pre > cmdPrecedence) return false;
         if (st.numeric.length === 0) throw new Error("Unary command expects at least one element in the numeric stack");
-        st.numeric.push(fn(throwSyntax, throwMath, st.numeric.popNumber()));
+        st.numeric.push(fn(st.numeric.popNumber(), throwRuntime, context));
         st.command.pop();
         return true;
     };
 }
-type BinaryFunction = (throwSyntax: ThrowMsg, throwMath: ThrowMsg, left: number, right: number) => number;
+type BinaryFunction = (left: number, right: number, throwRuntime: ThrowLocalRuntime, context: Context) => number;
 function binaryCommand(cmdPrecedence: Precedence, fn: BinaryFunction): Command {
-    return (st, pre, throwSyntax, throwMath) => {
+    return ({ evalStacks: st, context }: EvalContext, pre: Precedence, throwRuntime: ThrowLocalRuntime) => {
         if (pre > cmdPrecedence) return false;
         if (st.numeric.length < 2) throw new Error("Binary command expects >=2 elemens in the numeric stack");
         const right = st.numeric.popNumber();
         const left = st.numeric.popNumber();
-        st.numeric.push(fn(throwSyntax, throwMath, left, right));
+        st.numeric.push(fn(left, right, throwRuntime, context));
         st.command.pop();
         return true;
     };
@@ -232,20 +236,20 @@ class EvalStacks {
 
     constructor() {}
 
-    evalUntil(errorIter: TokenIterator, precedence: Precedence) {
+    evalUntil({ evalStacks, iter, context }: EvalContext, precedence: Precedence) {
         while (this.command.length !== 0 && this.command.last.cmd(
-            this,
+            { evalStacks, iter, context },
             precedence,
-            (msg) => throwSyntax(errorIter, msg),
-            (msg) => throwMath(errorIter, msg),
+            (ErrorClass, msg) => throwRuntime(ErrorClass, iter, msg),
         ));
     }
 }
 
 // Helper functions
-function handleInfixOperator(evalStacks: EvalStacks, iter: TokenIterator, tokenType: TokenType, pre: Precedence, fn: BinaryFunction) {
-    if (evalStacks.numeric.isPlaceholder()) throwSyntax(iter, "Expect number but found an infix operator instead");
-    evalStacks.evalUntil(iter, pre);
+function handleInfixOperator(evalContext: EvalContext, tokenType: TokenType, pre: Precedence, fn: BinaryFunction) {
+    const { evalStacks, iter } = evalContext;
+    if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found an infix operator instead");
+    evalStacks.evalUntil(evalContext, pre);
     evalStacks.command.push({
         tokenType: tokenType,
         cmd: binaryCommand(pre, fn),
@@ -253,21 +257,22 @@ function handleInfixOperator(evalStacks: EvalStacks, iter: TokenIterator, tokenT
     evalStacks.numeric.pushPlaceholder();
 }
 
-function insertOmittedMul(evalStacks: EvalStacks, iter: TokenIterator) {
+function insertOmittedMul(evalContext: EvalContext) {
+    const { evalStacks } = evalContext;
     if (evalStacks.numeric.isPlaceholder()) {
         evalStacks.numeric.popPlaceholder();
     } else {
-        evalStacks.evalUntil(iter, Precedence.L7);
+        evalStacks.evalUntil(evalContext, Precedence.L7);
         evalStacks.command.push({
             tokenType: null,
-            cmd: binaryCommand(Precedence.L7, (_, __, l, r) => l*r),
+            cmd: binaryCommand(Precedence.L7, (l, r) => l*r),
         });
     }
 }
 
 // Literal
-function meetLiteralToken(evalStacks: EvalStacks, iter: TokenIterator) {
-    if (!evalStacks.numeric.isPlaceholder()) throwSyntax(iter, "Unexpected number");
+function meetLiteralToken({ evalStacks, iter }: EvalContext) {
+    if (!evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Unexpected number");
     evalStacks.numeric.popPlaceholder();
 
     const value = acceptLiteral(iter);
@@ -275,9 +280,10 @@ function meetLiteralToken(evalStacks: EvalStacks, iter: TokenIterator) {
 }
 
 // Degree
-function meetDegreeToken(evalStacks: EvalStacks, iter: TokenIterator) {
-    if (evalStacks.numeric.isPlaceholder()) throwSyntax(iter, "Expect number but found degree");
-    evalStacks.evalUntil(iter, Precedence.L11);
+function meetDegreeToken(evalContext: EvalContext) {
+    const { evalStacks, iter } = evalContext;
+    if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found degree");
+    evalStacks.evalUntil(evalContext, Precedence.L11);
 
     /**
      * returns whether to continue accepting
@@ -286,13 +292,13 @@ function meetDegreeToken(evalStacks: EvalStacks, iter: TokenIterator) {
         iter.next();
         if (!iter.isInBound()) {
             iter.prev();
-            evalStacks.evalUntil(iter, Precedence.L11);
+            evalStacks.evalUntil(evalContext, Precedence.L11);
             return false;
         }
-        if (iter.cur()!.type === allTokenTypes.deg) throwSyntax(iter, "Not allowed two consecutive degree");
+        if (iter.cur()!.type === allTokenTypes.deg) throwRuntime(RuntimeSyntaxError, iter, "Not allowed two consecutive degree");
         if (!Object.values(literalTokenTypes).includes(iter.cur()!.type)) {
             iter.prev();
-            evalStacks.evalUntil(iter, Precedence.L11);
+            evalStacks.evalUntil(evalContext, Precedence.L11);
             return false;
         }
 
@@ -300,7 +306,7 @@ function meetDegreeToken(evalStacks: EvalStacks, iter: TokenIterator) {
         evalStacks.numeric.pushPlaceholder();
         evalStacks.command.push({
             tokenType: allTokenTypes.deg,
-            cmd: (st, _, __, ___) => {
+            cmd: ({ evalStacks: st }) => {
                 st.command.pop();
                 if (st.numeric.length < 2) throw new Error("Degree command expects >=2 elements in the numeric stack");
                 const last = st.numeric.popNumber();
@@ -316,7 +322,7 @@ function meetDegreeToken(evalStacks: EvalStacks, iter: TokenIterator) {
         evalStacks.numeric.replacePlaceholder(value);
         iter.next();
         if (!(iter.isInBound() && iter.cur()!.type === allTokenTypes.deg))
-            throwSyntax(iter, "Expect degree symbol after degree then number literal");
+            throwRuntime(RuntimeSyntaxError, iter, "Expect degree symbol after degree then number literal");
 
         return true;
     }
@@ -326,54 +332,54 @@ function meetDegreeToken(evalStacks: EvalStacks, iter: TokenIterator) {
 
     iter.next();
     if (iter.isInBound() && Object.values(literalTokenTypes).includes(iter.cur()!.type))
-        throwSyntax(iter, "Number literal cannot exist after a maximum of 3 degree symbols");
-    if (iter.isInBound() && iter.cur()!.type === allTokenTypes.deg) throwSyntax(iter, "Not allowed two consecutive degree");
+        throwRuntime(RuntimeSyntaxError, iter, "Number literal cannot exist after a maximum of 3 degree symbols");
+    if (iter.isInBound() && iter.cur()!.type === allTokenTypes.deg) throwRuntime(RuntimeSyntaxError, iter, "Not allowed two consecutive degree");
     iter.prev();
-    evalStacks.evalUntil(iter, Precedence.L11);
+    evalStacks.evalUntil(evalContext, Precedence.L11);
 }
 
 // Valued
-function meetValuedToken(evalStacks: EvalStacks, iter: TokenIterator, tokenType: ValuedTokenType) {
-    insertOmittedMul(evalStacks, iter);
-    evalStacks.numeric.push(tokenType.fn());
+function meetValuedToken({ evalStacks, iter, context }: EvalContext, tokenType: ValuedTokenType) {
+    insertOmittedMul({ evalStacks, iter, context });
+    evalStacks.numeric.push(tokenType.fn(context));
 }
 
 // Plus, minus and negative
-function meetPlusToken(evalStacks: EvalStacks, iter: TokenIterator) {
+function meetPlusToken({ evalStacks, iter, context }: EvalContext) {
     if (evalStacks.numeric.isPlaceholder()) {
         // nothing happens: more than 24 + does not cause STACK error
     } else {
-        handleInfixOperator(evalStacks, iter, allTokenTypes.plus, Precedence.L4, (_, __, left, right) => left + right);
+        handleInfixOperator({ evalStacks, iter, context }, allTokenTypes.plus, Precedence.L4, (left, right) => left + right);
     }
 }
-function meetPrefixMinus(evalStacks: EvalStacks, _: TokenIterator) {
+function meetPrefixMinus({ evalStacks }: EvalContext) {
     evalStacks.command.push({
         tokenType: allTokenTypes.neg,
-        cmd: unaryCommand(Precedence.L9, (_, __, x) => -x),
+        cmd: unaryCommand(Precedence.L9, (x) => -x),
     });
 }
-function meetInfixMinus(evalStacks: EvalStacks, iter: TokenIterator) {
-    handleInfixOperator(evalStacks, iter, allTokenTypes.minus, Precedence.L4, (_, __, left, right) => left - right);
+function meetInfixMinus(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, allTokenTypes.minus, Precedence.L4, (left, right) => left - right);
 }
-function meetMinusToken(evalStacks: EvalStacks, iter: TokenIterator) {
+function meetMinusToken({ evalStacks, iter, context }: EvalContext) {
     if (evalStacks.numeric.isPlaceholder()) {
-        meetPrefixMinus(evalStacks, iter);
+        meetPrefixMinus({ evalStacks, iter, context });
     } else {
-        meetInfixMinus(evalStacks, iter);
+        meetInfixMinus({ evalStacks, iter, context });
     }
 }
-function meetNegToken(evalStacks: EvalStacks, iter: TokenIterator) {
-    if (!evalStacks.numeric.isPlaceholder()) throwSyntax(iter, "Negative sign cannot follow a number (ommitted multiplication excludes negative sign)");
-    meetPrefixMinus(evalStacks, iter);
+function meetNegToken({ evalStacks, iter, context }: EvalContext) {
+    if (!evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Negative sign cannot follow a number (ommitted multiplication excludes negative sign)");
+    meetPrefixMinus({ evalStacks, iter, context });
 }
 
 // Multiply and divide
-function meetMultiplyToken(evalStacks: EvalStacks, iter: TokenIterator) {
-    handleInfixOperator(evalStacks, iter, allTokenTypes.multiply, Precedence.L5, (_, __, l, r) => l*r);
+function meetMultiplyToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, allTokenTypes.multiply, Precedence.L5, (l, r) => l*r);
 }
-function meetDivideToken(evalStacks: EvalStacks, iter: TokenIterator) {
-    handleInfixOperator(evalStacks, iter, allTokenTypes.divide, Precedence.L5, (_, throwMath, l, r) => {
-        if (r === 0) throwMath("Division by 0");
+function meetDivideToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, allTokenTypes.divide, Precedence.L5, (l, r, throwRuntime) => {
+        if (r === 0) throwRuntime(RuntimeMathError, "Division by 0");
         return l/r;
     });
 }
@@ -385,9 +391,9 @@ function validatePerComArguments(n: number, r: number, throwMath: (msg: string) 
     if (!(r <= n)) throwMath("n must be no less than r in nPr");
     if (!(n < Math.pow(10, 10))) throwMath("n must be less than 10^10 in nPr");
 }
-function meetPermutationToken(evalStacks: EvalStacks, iter: TokenIterator) {
-    handleInfixOperator(evalStacks, iter, allTokenTypes.permutation, Precedence.L6, (_, throwMath: ThrowMsg, n: number, r: number) => {
-        validatePerComArguments(n, r, throwMath);
+function meetPermutationToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, allTokenTypes.permutation, Precedence.L6, (n, r, throwRuntime) => {
+        validatePerComArguments(n, r, (msg) => throwRuntime(RuntimeMathError, msg));
 
         let ans = 1;
         for (let k = 0; k < r; ++k) {
@@ -396,9 +402,9 @@ function meetPermutationToken(evalStacks: EvalStacks, iter: TokenIterator) {
         return ans;
     });
 }
-function meetCombinationToken(evalStacks: EvalStacks, iter: TokenIterator) {
-    handleInfixOperator(evalStacks, iter, allTokenTypes.permutation, Precedence.L6, (_, throwMath: ThrowMsg, n: number, r: number) => {
-        validatePerComArguments(n, r, throwMath);
+function meetCombinationToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, allTokenTypes.permutation, Precedence.L6, (n, r, throwRuntime) => {
+        validatePerComArguments(n, r, (msg) => throwRuntime(RuntimeMathError, msg));
 
         let ans = 1;
         for (let k = 0; k < r; ++k) {
@@ -409,14 +415,15 @@ function meetCombinationToken(evalStacks: EvalStacks, iter: TokenIterator) {
 }
 
 // Fraction
-function meetFractionToken(evalStacks: EvalStacks, iter: TokenIterator) {
-    if (evalStacks.numeric.isPlaceholder()) throwSyntax(iter, "Expect number but found frac instead");
-    evalStacks.evalUntil(iter, Precedence.L10);
+function meetFractionToken(evalContext: EvalContext) {
+    const { evalStacks, iter } = evalContext;
+    if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found frac instead");
+    evalStacks.evalUntil(evalContext, Precedence.L10);
     if (evalStacks.command.length > 0 && evalStacks.command.last.tokenType === allTokenTypes.frac) {
-        if (evalStacks.command.length > 1 && evalStacks.command.raw.at(-2)!.tokenType === allTokenTypes.frac) throwSyntax(iter, "3 Frac not allowed");
+        if (evalStacks.command.length > 1 && evalStacks.command.raw.at(-2)!.tokenType === allTokenTypes.frac) throwRuntime(RuntimeSyntaxError, iter, "3 Frac not allowed");
         evalStacks.command.push({
             tokenType: allTokenTypes.frac,
-            cmd: (st, pre, _, throwMath) => {
+            cmd: ({ evalStacks: st }, pre, throwRuntime) => {
                 if (pre === Precedence.L10) throw new Error("what? i thought 3 fracs are thrown already");
                 // Later frac evaluates first, then negative sign (L8), then this frac
                 if (pre >= Precedence.L9) return false;
@@ -426,7 +433,7 @@ function meetFractionToken(evalStacks: EvalStacks, iter: TokenIterator) {
                 const den = st.numeric.popNumber();
                 const num = st.numeric.popNumber();
                 const int = st.numeric.popNumber();
-                if (den === 0) throwMath("Division by 0");
+                if (den === 0) throwRuntime(RuntimeMathError, "Division by 0");
                 if (num === 0) st.numeric.push(int);
                 else if (int === 0) st.numeric.push(num/den);
                 else {
@@ -440,14 +447,14 @@ function meetFractionToken(evalStacks: EvalStacks, iter: TokenIterator) {
     } else {
         evalStacks.command.push({
             tokenType: allTokenTypes.frac,
-            cmd: (st, pre, _, throwMath) => {
+            cmd: ({ evalStacks: st }, pre, throwRuntime) => {
                 // If another frac appears later (L9), this should not evaluate
                 // Later frac evaluates first, then negative sign (L8), then this frac
                 if (pre >= Precedence.L9) return false;
                 if (st.numeric.length < 2) throw new Error("Frac command expects >=2 elemens in the numeric stack");
                 const den = st.numeric.popNumber();
                 const num = st.numeric.popNumber();
-                if (den === 0) throwMath("Division by 0");
+                if (den === 0) throwRuntime(RuntimeMathError, "Division by 0");
                 st.numeric.push(num / den);
                 st.command.pop();
                 return true;
@@ -458,34 +465,36 @@ function meetFractionToken(evalStacks: EvalStacks, iter: TokenIterator) {
 }
 
 // Suffix function
-function meetSuffixFuncToken(evalStacks: EvalStacks, iter: TokenIterator, tokenType: SuffixFuncTokenType) {
-    if (evalStacks.numeric.isPlaceholder()) throwSyntax(iter, "Expect number but found suffix function instead");
+function meetSuffixFuncToken(evalContext: EvalContext, tokenType: SuffixFuncTokenType) {
+    const { evalStacks, iter, context } = evalContext;
+    if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found suffix function instead");
     const fn = tokenType.fn;
-    evalStacks.evalUntil(iter, Precedence.L11);
+    evalStacks.evalUntil(evalContext, Precedence.L11);
 
     if (evalStacks.numeric.length === 0) throw new Error("Suffix function expects >=1 elements in the numeric stack");
     const x = evalStacks.numeric.popNumber();
-    evalStacks.numeric.push(fn((msg) => throwMath(iter, msg), x));
+    evalStacks.numeric.push(fn((msg) => throwRuntime(RuntimeMathError, iter, msg), context, x));
 }
 
 // Parerenthical function
-function meetParenFuncToken(evalStacks: EvalStacks, iter: TokenIterator, tokenType: ParenFuncTokenType) {
-    insertOmittedMul(evalStacks, iter);
+function meetParenFuncToken<ArgNum extends ParenFuncArgNum>(evalContext: EvalContext, tokenType: ParenFuncTokenType<ArgNum>) {
+    const { evalStacks, iter, context } = evalContext;
+    insertOmittedMul({ evalStacks, iter, context });
     const oriNSLen = evalStacks.numeric.length;
     const argNum = tokenType.argNum;
-    const maxArgNum = (typeof argNum === "number") ? argNum : Math.max(...argNum);
+    const maxArgNum = (argNum instanceof Array) ? Math.max(...argNum) : argNum;
     const fn = tokenType.fn;
     evalStacks.command.push({
         tokenType: tokenType,
-        cmd: (st, pre, throwSyntax, throwMath) => {
+        cmd: ({ evalStacks: st }, pre, throwRuntime) => {
             if (pre !== Precedence.comma && pre !== Precedence.closeBracket && pre !== Precedence.lowest) return false;
 
             const curArgNum = st.numeric.length - oriNSLen;
             if (pre === Precedence.comma && curArgNum !== maxArgNum) return false;
 
-            const isArgNumAcceptable = (typeof argNum === "number") ? (curArgNum === argNum) : argNum.includes(curArgNum);
+            const isArgNumAcceptable = (argNum instanceof Array) ? argNum.includes(curArgNum) : (curArgNum === argNum);
             if ((pre === Precedence.closeBracket || Precedence.lowest) && !isArgNumAcceptable)
-                throwSyntax("Incorrect number of parenthetical function arguments");
+                throwRuntime(RuntimeSyntaxError, "Incorrect number of parenthetical function arguments");
 
             const args: number[] = [];
             for (let argI = 0; argI < curArgNum; ++argI) {
@@ -493,7 +502,9 @@ function meetParenFuncToken(evalStacks: EvalStacks, iter: TokenIterator, tokenTy
             }
             args.reverse();
 
-            st.numeric.push(fn(throwMath, ...args));
+            // @ts-expect-error
+            // Idk how to make this work lol, but args should be of type ArrayOfLength<number, ArgNum>
+            st.numeric.push(fn((msg) => throwRuntime(RuntimeMathError, msg), context, ...args));
             st.command.pop();
 
             if (pre === Precedence.closeBracket) return false;
@@ -503,21 +514,23 @@ function meetParenFuncToken(evalStacks: EvalStacks, iter: TokenIterator, tokenTy
     });
     evalStacks.numeric.pushPlaceholder();
 }
-function meetCommaToken(evalStacks: EvalStacks, iter: TokenIterator) {
-    if (evalStacks.numeric.isPlaceholder()) throwSyntax(iter, "Expect number but found comma instead");
-    evalStacks.evalUntil(iter, Precedence.comma);
+function meetCommaToken(evalContext: EvalContext) {
+    const { evalStacks, iter } = evalContext;
+    if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found comma instead");
+    evalStacks.evalUntil(evalContext, Precedence.comma);
     if (evalStacks.command.length === 0 || !(evalStacks.command.last.tokenType instanceof ParenFuncTokenType))
-        throwSyntax(iter, "Found comma at top level");
+        throwRuntime(RuntimeSyntaxError, iter, "Found comma at top level");
     evalStacks.numeric.pushPlaceholder();
 }
-function meetCloseBracketToken(evalStacks: EvalStacks, iter: TokenIterator) {
-    if (evalStacks.numeric.isPlaceholder()) throwSyntax(iter, "Expect number but found close bracket instead");
-    if (!evalStacks.command.raw.some((cmdEl) => cmdEl.tokenType instanceof ParenFuncTokenType)) throwSyntax(iter, "Found close bracket at top level");
-    evalStacks.evalUntil(iter, Precedence.closeBracket);
+function meetCloseBracketToken(evalContext: EvalContext) {
+    const { evalStacks, iter } = evalContext;
+    if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found close bracket instead");
+    if (!evalStacks.command.raw.some((cmdEl) => cmdEl.tokenType instanceof ParenFuncTokenType)) throwRuntime(RuntimeSyntaxError, iter, "Found close bracket at top level");
+    evalStacks.evalUntil(evalContext, Precedence.closeBracket);
 }
 
 // Main function to evaluate expression
-function evaluateExpression(tokens: Token[]) {
+function evaluateExpression(tokens: Token[], context: Context = defaultContext) {
     const evalStacks = new EvalStacks();
 
     evalStacks.numeric.pushPlaceholder();
@@ -525,52 +538,53 @@ function evaluateExpression(tokens: Token[]) {
     const iter = new TokenIterator(tokens);
 
     try {
+        const evalContext: EvalContext = { evalStacks, iter, context };
         for (; iter.isInBound(); iter.next()) {
             const cur = iter.cur()!;
             switch (cur.type) {
                 case allTokenTypes.deg:
-                    meetDegreeToken(evalStacks, iter);
+                    meetDegreeToken(evalContext);
                     break;
                 case allTokenTypes.plus:
-                    meetPlusToken(evalStacks, iter);
+                    meetPlusToken(evalContext);
                     break;
                 case allTokenTypes.minus:
-                    meetMinusToken(evalStacks, iter);
+                    meetMinusToken(evalContext);
                     break;
                 case allTokenTypes.neg:
-                    meetNegToken(evalStacks, iter);
+                    meetNegToken(evalContext);
                     break;
                 case allTokenTypes.multiply:
-                    meetMultiplyToken(evalStacks, iter);
+                    meetMultiplyToken(evalContext);
                     break;
                 case allTokenTypes.divide:
-                    meetDivideToken(evalStacks, iter);
+                    meetDivideToken(evalContext);
                     break;
                 case allTokenTypes.permutation:
-                    meetPermutationToken(evalStacks, iter);
+                    meetPermutationToken(evalContext);
                     break;
                 case allTokenTypes.combination:
-                    meetCombinationToken(evalStacks, iter);
+                    meetCombinationToken(evalContext);
                     break;
                 case allTokenTypes.frac:
-                    meetFractionToken(evalStacks, iter);
+                    meetFractionToken(evalContext);
                     break;
                 case allTokenTypes.comma:
-                    meetCommaToken(evalStacks, iter);
+                    meetCommaToken(evalContext);
                     break;
                 case allTokenTypes.closeBracket:
-                    meetCloseBracketToken(evalStacks, iter);
+                    meetCloseBracketToken(evalContext);
                     break;
 
                 default:
                     if (Object.values(literalTokenTypes).includes(cur.type)) {
-                        meetLiteralToken(evalStacks, iter);
+                        meetLiteralToken(evalContext);
                     } else if (cur.type instanceof ValuedTokenType) {
-                        meetValuedToken(evalStacks, iter, cur.type);
+                        meetValuedToken(evalContext, cur.type);
                     } else if (cur.type instanceof SuffixFuncTokenType) {
-                        meetSuffixFuncToken(evalStacks, iter, cur.type);
+                        meetSuffixFuncToken(evalContext, cur.type);
                     } else if (cur.type instanceof ParenFuncTokenType) {
-                        meetParenFuncToken(evalStacks, iter, cur.type);
+                        meetParenFuncToken<any>(evalContext, cur.type);
                     } else {
                         throw new Error("not supported token");
                     }
@@ -579,9 +593,9 @@ function evaluateExpression(tokens: Token[]) {
             // console.log(evalStacks.numeric, evalStacks.command);
         }
         if (evalStacks.numeric.isPlaceholder()) {
-            throwSyntax(iter, "Expect number");
+            throwRuntime(RuntimeSyntaxError, iter, "Expect number");
         }
-        evalStacks.evalUntil(iter, Precedence.lowest);
+        evalStacks.evalUntil(evalContext, Precedence.lowest);
 
         if (evalStacks.command.length !== 0) throw new Error("Expect the command stack to be empty after eval until lowest precedence");
         if (evalStacks.numeric.length !== 1) throw new Error("Expect the numeric stack to have exactly one element after eval until lowest precedence");
