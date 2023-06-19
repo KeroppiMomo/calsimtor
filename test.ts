@@ -1,11 +1,11 @@
 type TestCase = () => boolean;
 type TestCases = TestCase | TestCases[] | { [name: string]: TestCases };
 
-function testInput(input: string) {
+function testInput(input: string, context: Context = defaultContext) {
     return () => {
         const { tokens, errorPosition } = lexicalize(input, expressionTokenTypes);
         if (errorPosition.length !== 0) throw new Error("Lexicalization fails");
-        return evaluateExpression(tokens);
+        return evaluateExpression(tokens, context);
     };
 }
 function expectNumber(test: () => number, answer: number): TestCase {
@@ -59,6 +59,51 @@ function limitNumStack(stackSizeLeft: number) {
 }
 function limitCmdStack(stackSizeLeft: number) {
     return "(".repeat(24 - stackSizeLeft);
+}
+function radianContext(): Context {
+    return {
+        ...defaultContext,
+        setupSettings: {
+            ...defaultSetupSettings,
+            angle: AngleUnit.Rad,
+        },
+    };
+}
+function gradianContext(): Context {
+    return {
+        ...defaultContext,
+        setupSettings: {
+            ...defaultSetupSettings,
+            angle: AngleUnit.Gra,
+        },
+    };
+}
+function fixContext(x: IntRange<0, 10>): Context {
+    return {
+        ...defaultContext,
+        setupSettings: {
+            ...defaultSetupSettings,
+            displayDigits: DisplayDigits.Fix(x),
+        },
+    };
+}
+function sciContext(x: IntRange<1, 11>): Context {
+    return {
+        ...defaultContext,
+        setupSettings: {
+            ...defaultSetupSettings,
+            displayDigits: DisplayDigits.Sci(x),
+        },
+    };
+}
+function normContext(x: 1 | 2): Context {
+    return {
+        ...defaultContext,
+        setupSettings: {
+            ...defaultSetupSettings,
+            displayDigits: DisplayDigits.Norm(x),
+        },
+    };
 }
 
 const allTestCases: TestCases = {
@@ -144,6 +189,30 @@ const allTestCases: TestCases = {
             expect(testInput("5pi"), 15.707963267949),
             expect(testInput("3E4 pi^2"), 296_088.132_032_682),
         ],
+        variables: (() => {
+            const context = {
+                ...defaultContext,
+                variables: {
+                    A: 2,
+                    B: 3,
+                    C: 5,
+                    D: 8,
+                    X: 13,
+                    Y: 69,
+                    M: 420, // lmfao github copilot recommends this
+                    Ans: 1337,
+                },
+            };
+            return [
+                expect(testInput("A", context), 2),
+                expect(testInput("B!", context), 6),
+                expect(testInput("3C^2", context), 75),
+                expect(testInput("cbrt(D)", context), 2),
+                expect(testInput("X^2 + Y^3", context), 328678),
+                expect(testInput("M%", context), 4.20),
+                expect(testInput("Ans", context), 1337),
+            ];
+        })(),
     },
     plusMinus: {
         prefix: {
@@ -294,6 +363,24 @@ const allTestCases: TestCases = {
             expect(testInput("3%^2"), 0.0009),
             // TODO
         ],
+        angleConversion: {
+            degreeMode: [
+                expect(testInput("90 asD"), 90),
+                expect(testInput("pi/2 asR"), 0.027_415_567_780_803_9), // lol
+                expect(testInput("(pi/2) asR"), 90),
+                expect(testInput("100 asG"), 90),
+            ],
+            radianMode: [
+                expect(testInput("90 asD", radianContext()), 1.570_796_326_794_9),
+                expect(testInput("2 asR", radianContext()), 2),
+                expect(testInput("100 asG", radianContext()), 1.570_796_326_794_9),
+            ],
+            gradianMode: [
+                expect(testInput("90 asD", gradianContext()), 100),
+                expect(testInput("(pi/2) asR", gradianContext()), 100),
+                expect(testInput("100 asG", gradianContext()), 100),
+            ],
+        },
         stack: [
             expect(testInput(limitCmdStack(0) + "3^2"), 9),
             expect(testInput(limitCmdStack(0) + "3^2^2"), 81),
@@ -301,9 +388,9 @@ const allTestCases: TestCases = {
         ],
     },
     parenFunc: {
-        evaluation: [
-            expect(testInput("sin(pi div 2)"), 1),
-            expect(testInput("sin(pi div 2"), 1),
+        commaBracket: [
+            expect(testInput("sin(90)"), 1),
+            expect(testInput("sin(90"), 1),
             expect(testInput("ln(-1)"), RuntimeMathError, 3),
             expect(testInput("ln(-1"), RuntimeMathError, 3),
             expect(testInput("ln(-1,"), RuntimeMathError, 3),
@@ -312,7 +399,196 @@ const allTestCases: TestCases = {
             expect(testInput("log(log(2,1024"), 1),
             expect(testInput("log(log(100),16"), 4),
             expect(testInput("log(log(2,64,7776"), 5),
-            // TODO
+        ],
+        roots: [
+            expect(testInput("sqrt()"), RuntimeSyntaxError, 1),
+            expect(testInput("sqrt(1,2"), RuntimeSyntaxError, 2),
+            expect(testInput("sqrt(0)"), 0),
+            expect(testInput("sqrt(1)"), 1),
+            expect(testInput("sqrt(4)"), 2),
+            expect(testInput("sqrt(81)"), 9),
+            expect(testInput("sqrt(0.01)"), 0.1),
+            // expect(testInput("sqrt(E98)-E49"), 0),
+            expect(testInput("sqrt(-9)"), RuntimeMathError, 3),
+            expect(testInput("sqrt(--9)"), 3),
+            expect(testInput("sqrt(-0.0001)"), RuntimeMathError, 8),
+            expect(testInput("cbrt(1,2"), RuntimeSyntaxError, 2),
+            expect(testInput("cbrt()"), RuntimeSyntaxError, 1),
+            expect(testInput("cbrt(0)"), 0),
+            expect(testInput("cbrt(1)"), 1),
+            expect(testInput("cbrt(328509)"), 69),
+            expect(testInput("cbrt(-74088000)"), -420),
+            expect(testInput("cbrt(-0.000001)"), -0.01),
+        ],
+        log: [
+            expect(testInput("log()"), RuntimeSyntaxError, 1),
+            expect(testInput("log(1)"), 0),
+            expect(testInput("log(10)"), 1),
+            expect(testInput("log(1000)"), 3),
+            expect(testInput("log(0.00001)"), -5),
+            expect(testInput("log(E-78)"), -78),
+            expect(testInput("log(0)"), RuntimeMathError, 2),
+            expect(testInput("log(-3)"), RuntimeMathError, 3),
+            expect(testInput("log(--100)"), 2),
+            expect(testInput("log(2,8)"), 3),
+            expect(testInput("log(3.14,1)"), 0),
+            expect(testInput("log(5,0.04)"), -2),
+            expect(testInput("log(0.5,64)"), -6),
+            expect(testInput("log(0.2,0.008)"), 3),
+            expect(testInput("log(0,3)"), RuntimeMathError, 4),
+            expect(testInput("log(3,0)"), RuntimeMathError, 4),
+            expect(testInput("log(0,0)"), RuntimeMathError, 4),
+            expect(testInput("log(1,3)"), RuntimeMathError, 4),
+            expect(testInput("log(-2,9)"), RuntimeMathError, 5),
+            expect(testInput("log(-2,-8)"), RuntimeMathError, 6),
+            expect(testInput("log(2,-8)"), RuntimeMathError, 5),
+            expect(testInput("log(0,0^-1)"), RuntimeMathError, 4),
+            expect(testInput("log(1,0^-1)"), RuntimeMathError, 4),
+            expect(testInput("log(0,1,2)"), RuntimeMathError, 4),
+            expect(testInput("log(2,3,4)"), RuntimeSyntaxError, 4),
+            expect(testInput("ln()"), RuntimeSyntaxError, 1),
+            expect(testInput("ln(1)"), 0),
+            expect(testInput("ln(e)"), 1),
+            expect(testInput("ln(2)"), 0.693_147_180_559_946),
+            expect(testInput("ln(e^(-12"), -12),
+            expect(testInput("ln(e^(-12^2"), -144),
+            expect(testInput("ln(-0.01)"), RuntimeMathError, 6),
+            expect(testInput("ln(-3)"), RuntimeMathError, 3),
+            expect(testInput("ln(--1)"), 0),
+            expect(testInput("ln(1,2)"), RuntimeSyntaxError, 2),
+            expect(testInput("ln(0,2)"), RuntimeMathError, 2),
+        ],
+        exponentiation: {
+            evaluation: [
+                expect(testInput("10^()"), RuntimeSyntaxError, 1),
+                expect(testInput("10^(0)"), 1),
+                expect(testInput("10^(3)"), 1000),
+                expect(testInput("10^(-6)"), 0.000_001),
+                expect(testInput("10^(0.5)"), 3.162_277_660_168_38),
+                expect(testInput("10^(2,3)"), RuntimeSyntaxError, 2),
+                expect(testInput("e^()"), RuntimeSyntaxError, 1),
+                expect(testInput("e^(0)"), 1),
+                expect(testInput("e^(1)"), 2.718_281_828_459_04),
+                expect(testInput("e^(10)"), 22_026.465_794_806_7),
+                expect(testInput("e^(-3)"), 0.049_787_068_367_863_8),
+                expect(testInput("e^(1,2)"), RuntimeSyntaxError, 2),
+            ],
+            stack: [
+                expect(testInput(limitNumStack(1) + "10^(3"), 1010), // which is different from:
+                expect(testInput(limitNumStack(1) + "10 ^(3"), RuntimeStackError, 32),
+                expect(testInput(limitNumStack(1) + "e^(3"), 30.085_536_923_187_7), // which is different from:
+                expect(testInput(limitNumStack(1) + "e ^(3"), RuntimeStackError, 31),
+            ],
+        },
+        trig: {
+            degreeMode: [
+                expect(testInput("sin(0)"), 0),
+                expect(testInput("sin(90)"), 1),
+                expect(testInput("sin(180)"), 0),
+                expect(testInput("sin(270)"), -1),
+                expect(testInput("sin(-90)"), -1),
+                expect(testInput("sin(-245)"), 0.906_307_787_036_652),
+                expect(testInput("sin(8999999999.99992)"), 0),
+                expect(testInput("sin(8999999999.99993)"), RuntimeMathError, 17),
+                expect(testInput("sin(-8999999999.99990)"), 0),
+                expect(testInput("asin(0)"), 0),
+                expect(testInput("asin(-1)"), -90),
+                expect(testInput("asin(1)"), 90),
+                expect(testInput("asin(0.5)"), 30),
+                expect(testInput("asin(-0.906307787036652)"), -65),
+                expect(testInput("asin(-1.01)"), RuntimeMathError, 6),
+                expect(testInput("asin(1.01)"), RuntimeMathError, 5),
+
+                expect(testInput("cos(0)"), 1),
+                expect(testInput("cos(90)"), 0),
+                expect(testInput("cos(180)"), -1),
+                expect(testInput("cos(270)"), 0),
+                expect(testInput("cos(-90)"), 0),
+                expect(testInput("cos(-245)"), -0.422_618_261_740_699),
+                expect(testInput("acos(0)"), 90),
+                expect(testInput("acos(-1)"), 180),
+                expect(testInput("acos(1)"), 0),
+                expect(testInput("acos(0.5)"), 60),
+                expect(testInput("acos(-0.422618261740699)"), 115),
+
+                expect(testInput("tan(0)"), 0),
+                expect(testInput("tan(90)"), RuntimeMathError, 3),
+                expect(testInput("tan(180)"), 0),
+                expect(testInput("tan(270)"), RuntimeMathError, 4),
+
+                // TODO
+            ],
+        },
+        polRec: (() => {
+            function expectOutputXY(input: string, answer: number, x: number, y: number, angleUnit: AngleUnit = AngleUnit.Deg) {
+                return () => {
+                    const context = {
+                        ...defaultContext,
+                        variables: {
+                            ...defaultVariables,
+                        },
+                        setupSettings: {
+                            ...defaultSetupSettings,
+                            angle: angleUnit,
+                        },
+                    };
+                    if (!expect(testInput(input, context), answer)()) return false;
+                    if (context.variables.X !== x) {
+                        console.log(`Expect variable X to be ${x} but instead X is now:`, context.variables.X);
+                        return false;
+                    }
+                    if (context.variables.Y !== y) {
+                        console.log(`Expect variable Y to be ${y} but instead Y is now:`, context.variables.Y);
+                        return false;
+                    }
+                    return true;
+                };
+            }
+            return {
+                evaluation: [
+                    expect(testInput("Pol(0)"), RuntimeSyntaxError, 2),
+                    expect(testInput("Pol(0,0)"), RuntimeMathError, 4),
+                    expect(testInput("Pol(1,2,3"), RuntimeSyntaxError, 4),
+                    expect(testInput("Pol(0,0,3"), RuntimeMathError, 4),
+                    expectOutputXY("Pol(3,0)", 3, 3, 0),
+                    expectOutputXY("Pol(0,4)", 4, 4, 90),
+                    expectOutputXY("Pol(-5,0)", 5, 5, 180),
+                    expectOutputXY("Pol(0,-6)", 6, 6, -90),
+                    expectOutputXY("Pol(12,5)", 13, 13, 22.619_864_948_040_3),
+                    expectOutputXY("Pol(20,-21)", 29, 29, -46.397_181_027_296_4),
+                    expectOutputXY("Pol(-2,-2)", 2.828_427_124_746_19, 2.828_427_124_746_19, -135),
+                    expectOutputXY("Pol(-3,4)", 5, 5, 126.869_897_645_844),
+                    expect(testInput("Rec(0)"), RuntimeSyntaxError, 2),
+                    expect(testInput("Rec(1,2,3"), RuntimeSyntaxError, 4),
+                    expectOutputXY("Rec(0,0)", 0, 0, 0),
+                    expectOutputXY("Rec(0,234)", 0, 0, 0),
+                    expectOutputXY("Rec(3,0)", 3, 3, 0),
+                    expectOutputXY("Rec(4,90)", 0, 0, 4),
+                    expectOutputXY("Rec(5,180)", -5, -5, 0),
+                    expectOutputXY("Rec(6,270)", 0, 0, -6),
+                    expectOutputXY("Rec(7,360)", 7, 7, 0),
+                    expectOutputXY("Rec(8,-36270)", 0, 0, 8),
+                    expectOutputXY("Rec(9,30)", 7.794_228_634_059_95, 7.794_228_634_059_95, 4.5),
+                    expectOutputXY("Rec(10,-75)", 2.588_190_451_025_21, 2.588_190_451_025_21, -9.659_258_262_890_68),
+                    expectOutputXY("Rec(11,-135)", -7.778_174_593_052_02, -7.778_174_593_052_02, -7.778_174_593_052_02),
+                    expectOutputXY("Rec(12,-200)", -11.276_311_449_430_9, -11.276_311_449_430_9, 4.104_241_719_908_01),
+                ],
+                angleUnits: [
+                    expectOutputXY("Pol(0,3)", 3, 3, 90, AngleUnit.Deg),
+                    expectOutputXY("Pol(0,3)", 3, 3, 1.570_796_326_794_9, AngleUnit.Rad),
+                    expectOutputXY("Pol(0,3)", 3, 3, 100, AngleUnit.Gra),
+                ],
+            };
+        })(),
+        rnd: [
+            expect(testInput("Rnd(1.23456)", fixContext(3)), 1.235),
+            expect(testInput("Rnd(1.23446)", fixContext(3)), 1.234),
+            expect(testInput("Rnd(1234.56)", sciContext(3)), 1230),
+            expect(testInput("Rnd(1235.56)", sciContext(3)), 1240),
+            expect(testInput("Rnd(1234.5678914)", normContext(1)), 1234.567891),
+            expect(testInput("Rnd(1234.5678915)", normContext(1)), 1234.567892),
+            expect(testInput("Rnd(1234.5678914)", normContext(2)), 1234.567891),
+            expect(testInput("Rnd(1234.5678915)", normContext(2)), 1234.567892),
         ],
         stack: [
             expect(testInput("(".repeat(24) + "3"), 3),

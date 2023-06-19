@@ -115,6 +115,15 @@ const valuedTokenTypes = {
 
     ran: new ValuedTokenType("Ran#", () => Math.floor(Math.random() * 1000) / 1000),
 
+    varA: new ValuedTokenType("A", (context) => context.variables.A),
+    varB: new ValuedTokenType("B", (context) => context.variables.B),
+    varC: new ValuedTokenType("C", (context) => context.variables.C),
+    varD: new ValuedTokenType("D", (context) => context.variables.D),
+    varX: new ValuedTokenType("X", (context) => context.variables.X),
+    varY: new ValuedTokenType("Y", (context) => context.variables.Y),
+    varM: new ValuedTokenType("M", (context) => context.variables.M),
+    ans: new ValuedTokenType("Ans", (context) => context.variables.Ans),
+
     massProton: new ValuedTokenType("mp", "m_p", 1.672_621_777e-27),
     massNeutron: new ValuedTokenType("mn", "m_n", 1.674_927_351e-27),
     massElectron: new ValuedTokenType("me", "m_e", 9.109_382_91e-31),
@@ -189,9 +198,9 @@ const suffixFuncTokenTypes = {
 
     percentage: new SuffixFuncTokenType("%", (_, __, x) => x/100),
 
-    // asD: new TokenType("asD", "°"),
-    // asR: new TokenType("asR", "ʳ"),
-    // asG: new TokenType("asG", "ᵍ"),
+    asD: new SuffixFuncTokenType("asD", "°", (_, context, x) => x * angleUnitToRad(AngleUnit.Deg) / angleUnitToRad(context.setupSettings.angle)),
+    asR: new SuffixFuncTokenType("asR", "ʳ", (_, context, x) => x * angleUnitToRad(AngleUnit.Rad) / angleUnitToRad(context.setupSettings.angle)),
+    asG: new SuffixFuncTokenType("asG", "ᵍ", (_, context, x) => x * angleUnitToRad(AngleUnit.Gra) / angleUnitToRad(context.setupSettings.angle)),
 };
 
 const parenFuncTokenTypes = {
@@ -217,29 +226,84 @@ const parenFuncTokenTypes = {
         return Math.log(x)
     }),
     eExp: new ParenFuncTokenType("e^(", 1, (_, __, x) => Math.exp(x)),
-    sin: new ParenFuncTokenType("sin(", 1, (_, __, x) => {
-        // TODO
-        return Math.sin(x)
+    sin: new ParenFuncTokenType("sin(", 1, (throwMath, context, x) => {
+        const range: number = {
+            [AngleUnit.Deg]: 8_999_999_999.999_92,
+            [AngleUnit.Rad]: 157_079_632.679_488,
+            [AngleUnit.Gra]: 9_999_999_999.999_90,
+        }[context.setupSettings.angle];
+        if (Math.abs(x) > range) throwMath(`Cannot take the sin of a value with an absolute value greater than ${range} in this angle unit`);
+        return Math.sin(x * angleUnitToRad(context.setupSettings.angle));
     }),
-    asin: new ParenFuncTokenType("asin(", "sin^-1(", 1, (_, __, x) => Math.asin(x)),
+    asin: new ParenFuncTokenType("asin(", "sin^-1(", 1, (throwMath, context, x) => {
+        if (Math.abs(x) > 1) throwMath("Cannot take the arcsin of a value with an absolute value greater than 1");
+        return Math.asin(x) / angleUnitToRad(context.setupSettings.angle);
+    }),
     sinh: new ParenFuncTokenType("sinh(", 1, (_, __, x) => Math.sinh(x)),
     asinh: new ParenFuncTokenType("asinh(", "sinh^-1(", 1, (_, __, x) => Math.asinh(x)),
-    cos: new ParenFuncTokenType("cos(", 1, (_, __, x) => Math.cos(x)),
-    acos: new ParenFuncTokenType("acos(", "cos^-1(", 1, (_, __, x) => Math.acos(x)),
+    cos: new ParenFuncTokenType("cos(", 1, (throwMath, context, x) => {
+        const range: number = {
+            [AngleUnit.Deg]: 8_999_999_999.999_92,
+            [AngleUnit.Rad]: 157_079_632.679_488,
+            [AngleUnit.Gra]: 9_999_999_999.999_90,
+        }[context.setupSettings.angle];
+        if (Math.abs(x) > range) throwMath(`Cannot take the cos of a value with an absolute value greater than ${range} in this angle unit`);
+        return Math.cos(x * angleUnitToRad(context.setupSettings.angle));
+    }),
+    acos: new ParenFuncTokenType("acos(", "cos^-1(", 1, (throwMath, context, x) => {
+        if (Math.abs(x) > 1) throwMath("Cannot take the arccos of a value with an absolute value greater than 1");
+        return Math.acos(x) / angleUnitToRad(context.setupSettings.angle);
+    }),
     cosh: new ParenFuncTokenType("cosh(", 1, (_, __, x) => Math.cosh(x)),
-    acosh: new ParenFuncTokenType("acosh(", "cosh^-1(", 1, (_, __, x) => Math.acosh(x)),
-    tan: new ParenFuncTokenType("tan(", 1, (_, __, x) => Math.tan(x)),
-    atan: new ParenFuncTokenType("atan(", "tan^-1(", 1, (_, __, x) => Math.atan(x)),
+    acosh: new ParenFuncTokenType("acosh(", "cosh^-1(", 1, (_, __, x) => Math.asinh(x)),
+    tan: new ParenFuncTokenType("tan(", 1, (throwMath, context, x) => {
+        const range: number = {
+            [AngleUnit.Deg]: 8_999_999_999.999_92,
+            [AngleUnit.Rad]: 157_079_632.679_488,
+            [AngleUnit.Gra]: 9_999_999_999.999_90,
+        }[context.setupSettings.angle];
+        if (Math.abs(x) > range) throwMath(`Cannot take the tan of a value with an absolute value greater than ${range} in this angle unit`);
+
+        const undefinedAt: number = {
+            [AngleUnit.Deg]: 90,
+            [AngleUnit.Rad]: 1.570_796_326_794_90,
+            [AngleUnit.Gra]: 100,
+        }[context.setupSettings.angle];
+        const quotient = Math.round(x / undefinedAt);
+        if (quotient % 2 === 1) {
+            const closest = quotient * undefinedAt;
+            if (x - closest === 0) throwMath(`Tan of this value is undefined`);
+        }
+
+        return Math.tan(x * angleUnitToRad(context.setupSettings.angle));
+    }),
+    atan: new ParenFuncTokenType("atan(", "tan^-1(", 1, (_, context, x) => {
+        return Math.atan(x) / angleUnitToRad(context.setupSettings.angle);
+    }),
     tanh: new ParenFuncTokenType("tanh(", 1, (_, __, x) => Math.tanh(x)),
-    atanh: new ParenFuncTokenType("atanh(", "tanh^-1(", 1, (_, __, x) => Math.atanh(x)),
-    // TODO
-    polar: new ParenFuncTokenType("Pol(", 2, (_, __, x, y) => {
-        return Math.sqrt(x*x + y*y);
+    atanh: new ParenFuncTokenType("atanh(", "tanh^-1(", 1, (_, __, x) => Math.asinh(x)),
+    polar: new ParenFuncTokenType("Pol(", 2, (throwMath, context, x, y) => {
+        if (x === 0 && y === 0) throwMath("Cannot convert (0,0) to polar form");
+        context.variables.Y = Math.atan2(y, x) / angleUnitToRad(context.setupSettings.angle);
+        return context.variables.X = Math.sqrt(x*x + y*y);
     }),
-    rect: new ParenFuncTokenType("Rec(", 2, (_, __, r, theta) => {
-        return r*Math.cos(theta);
+    rect: new ParenFuncTokenType("Rec(", 2, (_, context, r, theta) => {
+        const angleInRad = theta * angleUnitToRad(context.setupSettings.angle);
+        context.variables.Y = r * Math.sin(angleInRad);
+        return context.variables.X = r * Math.cos(angleInRad);
     }),
-    rnd: new ParenFuncTokenType("Rnd(", 1, (_, __, x) => Math.round(x)),
+    rnd: new ParenFuncTokenType("Rnd(", 1, (_, context, x) => {
+        const digits = context.setupSettings.displayDigits.digits;
+        switch (context.setupSettings.displayDigits.kind) {
+            case DisplayDigitsKind.Fix:
+                const pow10 = Math.pow(10, digits);
+                return Math.round(x * pow10) / pow10;
+            case DisplayDigitsKind.Sci:
+                return Number(x.toExponential(digits - 1));
+            case DisplayDigitsKind.Norm:
+                return Number(x.toExponential(9)); // round to 10 significant figures
+        }
+    }),
     abs: new ParenFuncTokenType("Abs(", 1, (_, __, x) => Math.abs(x)),
     openBracket: new ParenFuncTokenType("(", 1, (_, __, x) => x),
 };
@@ -257,24 +321,15 @@ const expressionTokenTypes = {
     root: new TokenType("rt(", "x√"),
 
     neg: new TokenType("neg", "-"),
-    varA: new TokenType("A"),
 
     deg: new TokenType("deg", "°"),
-    varB: new TokenType("B"),
-
-    varC: new TokenType("C"),
-
-    varD: new TokenType("D"),
 
     closeBracket: new TokenType(")"),
-    varX: new TokenType("X"),
 
     comma: new TokenType(","),
-    varY: new TokenType("Y"),
 
     mPlus: new TokenType("M+"),
     mMinus: new TokenType("M-"),
-    varM: new TokenType("M"),
 
     plus: new TokenType("+"),
     minus: new TokenType("-"),
@@ -283,8 +338,6 @@ const expressionTokenTypes = {
 
     permutation: new TokenType("Per", "𝐏"),
     combination: new TokenType("Com", "𝐂"),
-
-    ans: new TokenType("Ans"),
 };
 
 

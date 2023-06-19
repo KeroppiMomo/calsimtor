@@ -35,10 +35,15 @@ function angleUnitToRad(unit: AngleUnit): number {
     }
 }
 
+const DisplayDigitsKind = {
+    Fix: "Fix",
+    Sci: "Sci",
+    Norm: "Norm",
+} as const;
 const DisplayDigits = {
-    Fix: (digits: IntRange<0, 10>) => ({ kind: "Fix", digits }),
-    Sci: (digits: IntRange<1, 11>) => ({ kind: "Sci", digits }),
-    Norm: (digits: 1 | 2) => ({ kind: "Norm", digits }),
+    Fix: (digits: IntRange<0, 10>) => ({ kind: DisplayDigitsKind.Fix, digits }),
+    Sci: (digits: IntRange<1, 11>) => ({ kind: DisplayDigitsKind.Sci, digits }),
+    Norm: (digits: 1 | 2) => ({ kind: DisplayDigitsKind.Norm, digits }),
 };
 type DisplayDigits = ReturnType<UnionValues<typeof DisplayDigits>>;
 
@@ -87,11 +92,6 @@ const defaultVariables: Variables = {
     M: 0,
     Ans: 0,
 };
-
-const variables: Variables = {
-    ...defaultVariables,
-    A: 3,
-}
 
 type Context = {
     mode: CalculationMode,
