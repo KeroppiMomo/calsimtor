@@ -530,7 +530,7 @@ function meetCloseBracketToken(evalContext: EvalContext) {
 }
 
 // Main function to evaluate expression
-function evaluateExpression(tokens: Token[], context: Context = defaultContext) {
+function evaluateExpression(tokens: Token[], context: Context = new Context()) {
     const evalStacks = new EvalStacks();
 
     evalStacks.numeric.pushPlaceholder();

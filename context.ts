@@ -57,49 +57,39 @@ enum ComplexFormat {
     Polar = "Polar",
 }
 
-type SetupSettings = {
-    angle: AngleUnit,
-    displayDigits: DisplayDigits,
-    fractionFormat: FractionFormat,
-    complexFormat: ComplexFormat,
-    frequencyOn: boolean,
-};
-const defaultSetupSettings: SetupSettings = {
-    angle: AngleUnit.Deg,
-    displayDigits: DisplayDigits.Norm(2),
-    fractionFormat: FractionFormat.Mixed,
-    complexFormat: ComplexFormat.Rectangular,
-    frequencyOn: true,
+class SetupSettings {
+    angle: AngleUnit = AngleUnit.Deg;
+    displayDigits: DisplayDigits = DisplayDigits.Norm(2);
+    fractionFormat: FractionFormat = FractionFormat.Mixed;
+    complexFormat: ComplexFormat = ComplexFormat.Rectangular;
+    frequencyOn: boolean = true;
+
+    constructor(options: Partial<SetupSettings> = {}) {
+        Object.assign(this, options);
+    }
+}
+
+class Variables {
+    A = 0;
+    B = 0;
+    C = 0;
+    D = 0;
+    X = 0;
+    Y = 0;
+    M = 0;
+    Ans = 0;
+
+    constructor(options: Partial<Variables> = {}) {
+        Object.assign(this, options);
+    }
 };
 
-type Variables = {
-    A: number,
-    B: number,
-    C: number,
-    D: number,
-    X: number,
-    Y: number,
-    M: number,
-    Ans: number,
-};
-const defaultVariables: Variables = {
-    A: 0,
-    B: 0,
-    C: 0,
-    D: 0,
-    X: 0,
-    Y: 0,
-    M: 0,
-    Ans: 0,
-};
+class Context {
+    mode: CalculationMode = CalculationMode.Comp;
+    setupSettings: SetupSettings = new SetupSettings();
+    variables: Variables = new Variables();
 
-type Context = {
-    mode: CalculationMode,
-    setupSettings: SetupSettings,
-    variables: Variables,
-};
-const defaultContext: Context = {
-    mode: CalculationMode.Comp,
-    setupSettings: defaultSetupSettings,
-    variables: defaultVariables,
-};
+    constructor(options: Partial<Context> = {}) {
+        Object.assign(this, options);
+    }
+}

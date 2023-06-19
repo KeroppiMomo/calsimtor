@@ -1,7 +1,7 @@
 type TestCase = () => boolean;
 type TestCases = TestCase | TestCases[] | { [name: string]: TestCases };
 
-function testInput(input: string, context: Context = defaultContext) {
+function testInput(input: string, context: Context = new Context()) {
     return () => {
         const { tokens, errorPosition } = lexicalize(input, expressionTokenTypes);
         if (errorPosition.length !== 0) throw new Error("Lexicalization fails");
@@ -61,49 +61,19 @@ function limitCmdStack(stackSizeLeft: number) {
     return "(".repeat(24 - stackSizeLeft);
 }
 function radianContext(): Context {
-    return {
-        ...defaultContext,
-        setupSettings: {
-            ...defaultSetupSettings,
-            angle: AngleUnit.Rad,
-        },
-    };
+    return new Context({ setupSettings: new SetupSettings({ angle: AngleUnit.Rad }) });
 }
 function gradianContext(): Context {
-    return {
-        ...defaultContext,
-        setupSettings: {
-            ...defaultSetupSettings,
-            angle: AngleUnit.Gra,
-        },
-    };
+    return new Context({ setupSettings: new SetupSettings({ angle: AngleUnit.Gra }) });
 }
 function fixContext(x: IntRange<0, 10>): Context {
-    return {
-        ...defaultContext,
-        setupSettings: {
-            ...defaultSetupSettings,
-            displayDigits: DisplayDigits.Fix(x),
-        },
-    };
+    return new Context({ setupSettings: new SetupSettings({ displayDigits: DisplayDigits.Fix(x) }) });
 }
 function sciContext(x: IntRange<1, 11>): Context {
-    return {
-        ...defaultContext,
-        setupSettings: {
-            ...defaultSetupSettings,
-            displayDigits: DisplayDigits.Sci(x),
-        },
-    };
+    return new Context({ setupSettings: new SetupSettings({ displayDigits: DisplayDigits.Sci(x) }) });
 }
 function normContext(x: 1 | 2): Context {
-    return {
-        ...defaultContext,
-        setupSettings: {
-            ...defaultSetupSettings,
-            displayDigits: DisplayDigits.Norm(x),
-        },
-    };
+    return new Context({ setupSettings: new SetupSettings({ displayDigits: DisplayDigits.Norm(x) }) });
 }
 
 const allTestCases: TestCases = {
@@ -190,9 +160,8 @@ const allTestCases: TestCases = {
             expect(testInput("3E4 pi^2"), 296_088.132_032_682),
         ],
         variables: (() => {
-            const context = {
-                ...defaultContext,
-                variables: {
+            const context = new Context({
+                variables: new Variables({
                     A: 2,
                     B: 3,
                     C: 5,
@@ -201,8 +170,9 @@ const allTestCases: TestCases = {
                     Y: 69,
                     M: 420, // lmfao github copilot recommends this
                     Ans: 1337,
-                },
-            };
+                }),
+            });
+
             return [
                 expect(testInput("A", context), 2),
                 expect(testInput("B!", context), 6),
@@ -522,16 +492,12 @@ const allTestCases: TestCases = {
         polRec: (() => {
             function expectOutputXY(input: string, answer: number, x: number, y: number, angleUnit: AngleUnit = AngleUnit.Deg) {
                 return () => {
-                    const context = {
-                        ...defaultContext,
-                        variables: {
-                            ...defaultVariables,
-                        },
-                        setupSettings: {
-                            ...defaultSetupSettings,
+                    const context = new Context({
+                        setupSettings: new SetupSettings({
                             angle: angleUnit,
-                        },
-                    };
+                        }),
+                    });
+
                     if (!expect(testInput(input, context), answer)()) return false;
                     if (context.variables.X !== x) {
                         console.log(`Expect variable X to be ${x} but instead X is now:`, context.variables.X);
