@@ -530,15 +530,15 @@ function meetCloseBracketToken(evalContext: EvalContext) {
 }
 
 // Main function to evaluate expression
-function evaluateExpression(tokens: Token[], context: Context = new Context()) {
+function evaluateExpression(iter: TokenIterator, context: Context = new Context(), isIsolated: boolean = true) {
     const evalStacks = new EvalStacks();
 
     evalStacks.numeric.pushPlaceholder();
 
-    const iter = new TokenIterator(tokens);
-
     try {
         const evalContext: EvalContext = { evalStacks, iter, context };
+
+        loop:
         for (; iter.isInBound(); iter.next()) {
             const cur = iter.cur()!;
             switch (cur.type) {
@@ -586,7 +586,8 @@ function evaluateExpression(tokens: Token[], context: Context = new Context()) {
                     } else if (cur.type instanceof ParenFuncTokenType) {
                         meetParenFuncToken<any>(evalContext, cur.type);
                     } else {
-                        throw new Error("not supported token");
+                        if (isIsolated) throwRuntime(RuntimeSyntaxError, iter, "Unsupported token");
+                        else break loop;
                     }
             }
 

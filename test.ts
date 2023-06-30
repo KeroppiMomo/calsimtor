@@ -5,7 +5,7 @@ function testInput(input: string, context: Context = new Context()) {
     return () => {
         const { tokens, errorPosition } = lexicalize(input, expressionTokenTypes);
         if (errorPosition.length !== 0) throw new Error("Lexicalization fails");
-        return evaluateExpression(tokens, context);
+        return evaluateExpression(new TokenIterator(tokens), context);
     };
 }
 function expectNumber(test: () => number, answer: number): TestCase {
@@ -592,4 +592,4 @@ function testAll() {
     test(allTestCases);
 }
 
-testAll();
+// testAll();

@@ -34,23 +34,6 @@ class RuntimeSyntaxError extends RuntimeError {}
 class RuntimeMathError extends RuntimeError {}
 class RuntimeStackError extends RuntimeError {}
 
-class Variable {
-    static all = {
-        A: new Variable("A"),
-        B: new Variable("B"),
-        C: new Variable("C"),
-        D: new Variable("D"),
-        X: new Variable("X"),
-        Y: new Variable("Y"),
-        M: new Variable("M"),
-        Ans: new Variable("Ans"),
-    };
-
-    value = 0;
-
-    constructor(public name: string) {}
-}
-
 type LexicalizationResult = {
     tokens: Token[];
     errorPosition: SourcePosition[];
@@ -128,10 +111,10 @@ function displayRuntimeError(err: RuntimeError) {
     execution.appendChild(document.createElement("br"));
 }
 
-function promptAssign(variable: Variable) {
-    return new Promise<void>((resolve) => {
+function promptAssign(context: Context, varName: keyof typeof Variables.prototype) {
+    return new Promise<number>((resolve) => {
         const execution = document.getElementById("execution")!;
-        execution.appendChild(document.createTextNode(variable.name + "?"));
+        execution.appendChild(document.createTextNode(varName + "?"));
 
         const div = document.createElement("div");
         div.className = "sourceToken";
@@ -140,20 +123,43 @@ function promptAssign(variable: Variable) {
         tokenInput.readOnly = true;
 
         const sourceInput = document.createElement("input");
-        sourceInput.placeholder = variable.value.toString();
+        sourceInput.placeholder = context.variables[varName].toString();
         sourceInput.oninput = () => {
             const { tokens } = lexicalize(sourceInput.value, expressionTokenTypes);
             tokenInput.value = tokensToString(tokens);
         };
         sourceInput.addEventListener("keyup", (event) => {
             if (event.code === "Enter") {
-                // TODO
-                sourceInput.readOnly = true;
                 if (sourceInput.value === "") {
-                    sourceInput.value = variable.value.toString();
+                    sourceInput.value = context.variables[varName].toString();
+                    sourceInput.readOnly = true;
+                    resolve(context.variables[varName]);
+                } else {
+                    const { tokens, errorPosition } = lexicalize(sourceInput.value, expressionTokenTypes);
+                    if (errorPosition.length > 0) {
+                        alert(`Lexicalization error: unknown symbol "${sourceInput.value[errorPosition[0]!.index]}". \nTry another input.`);
+                        return;
+                    }
+                    try {
+                        const val = evaluateExpression(new TokenIterator(tokens), context);
+                        context.variables[varName] = val;
+                        sourceInput.readOnly = true;
+                        resolve(val);
+                    } catch (err: unknown) {
+                        console.error(err);
+                        if (err instanceof RuntimeError) {
+                            const errorName = (() => {
+                                if (err instanceof RuntimeSyntaxError) return "Syntax ERROR";
+                                else if (err instanceof RuntimeMathError) return "Math ERROR";
+                                else if (err instanceof RuntimeStackError) return "Stack ERROR";
+                                else return "Unknown runtime error";
+                            })();
+                            alert(`${errorName} at ${err.sourcePos.line+1}:${err.sourcePos.column+1} (${err.message})`);
+                        } else {
+                            alert("Unknown error (see console)");
+                        }
+                    }
                 }
-                variable.value = parseInt(sourceInput.value);
-                resolve();
             }
         });
 
@@ -179,88 +185,14 @@ function display(tokens: Token[], val: number, disp=true) {
         execution.appendChild(document.createTextNode(val.toString()));
         execution.appendChild(document.createElement("br"));
         execution.appendChild(document.createElement("br"));
-        document.addEventListener("keyup", (event) => {
+        function handler(event: KeyboardEvent) {
             if (event.code === "Enter") {
-                console.log("hello");
                 resolve();
+                document.removeEventListener("keyup", handler);
             }
-        });
+        }
+        document.addEventListener("keyup", handler);
     });
-}
-
-async function interpret(tokens: Token[]) {
-    try {
-        if (tokens.length == 0) {
-            throw new RuntimeSyntaxError(new SourcePosition(0, 0, 0), 0, "Empty program");
-        }
-        while (true) {
-            let i = 0;
-            function throwRuntime(failedMessage: string): never {
-                const pos = (i >= tokens.length) ? tokens.at(-1)!.sourceEnd : tokens[i]!.sourceStart;
-                throw new RuntimeSyntaxError(pos, i, failedMessage);
-            }
-            function expectNext(type: TokenType, failedMessage: string) {
-                if (i != tokens.length && tokens[i]!.type === type) {
-                    i++;
-                    return;
-                }
-                throwRuntime(failedMessage);
-            }
-            function expectEnd(failedMessage: string) {
-                if (i === tokens.length || tokens[i]!.type === programTokenTypes.separator || tokens[i]!.type === programTokenTypes.disp) {
-                    return;
-                }
-                throwRuntime(failedMessage);
-            }
-
-            while (i < tokens.length) {
-                const oriI = i;
-                const token = tokens[i]!;
-                let value: number;
-                if (token.type === programTokenTypes.prompt) {
-                    i++;
-                    expectNext(programTokenTypes.assign, "Input prompt expects assignment");
-                    const varName = tokens[i]!.source;
-                    if (i === tokens.length || !(varName in Variable.all)) {
-                        throwRuntime("Input prompt expects variable");
-                    }
-                    const variable = Variable.all[varName as keyof typeof Variable.all];
-                    if (variable === Variable.all.Ans) {
-                        throwRuntime("Cannot assignment to Ans");
-                    }
-                    i++;
-                    expectEnd("Input prompt expects ending after variable");
-                    await promptAssign(variable);
-                    value = variable.value;
-                } else {
-                    throwRuntime("Unexpected token");
-                }
-
-                if (i === tokens.length) {
-                    await display(tokens.slice(oriI, i), value, false);
-                } else if (tokens[i]!.type === programTokenTypes.separator) {
-                    i++;
-                    if (i == tokens.length) {
-                        await display(tokens.slice(oriI, i-1), value, false);
-                    }
-                } else if (tokens[i]!.type === programTokenTypes.disp) {
-                    await display(tokens.slice(oriI, i), value, true);
-                    i++;
-                    if (i == tokens.length) {
-                        await display([], value, false);
-                    }
-                } else {
-                    throwRuntime("Ending expected");
-                }
-            }
-        }
-    } catch (e: unknown) {
-        if (e instanceof RuntimeError) {
-            displayRuntimeError(e);
-        } else {
-            throw e;
-        }
-    }
 }
 
 let tokens = [];

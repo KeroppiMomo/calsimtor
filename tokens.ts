@@ -30,6 +30,12 @@ class ValuedTokenType extends TokenType {
     }
 }
 
+class VariableTokenType extends ValuedTokenType {
+    constructor(public varName: keyof typeof Variables.prototype) {
+        super(varName, (context) => context.variables[varName]);
+    }
+}
+
 type ThrowMsg = (msg: string) => never;
 
 type SuffixFunc = (throwMath: ThrowMsg, context: Context, x: number) => number;
@@ -109,20 +115,24 @@ const literalTokenTypes = {
     dot: new TokenType("."),
 };
 
+const variableTokenTypes = {
+    varA: new VariableTokenType("A"),
+    varB: new VariableTokenType("B"),
+    varC: new VariableTokenType("C"),
+    varD: new VariableTokenType("D"),
+    varX: new VariableTokenType("X"),
+    varY: new VariableTokenType("Y"),
+    varM: new VariableTokenType("M"),
+    ans: new VariableTokenType("Ans"),
+};
+
 const valuedTokenTypes = {
     pi: new ValuedTokenType("pi", "π", 3.141_592_653_589_8),
     e: new ValuedTokenType("e", 2.718_281_828_459_04),
 
-    ran: new ValuedTokenType("Ran#", () => Math.floor(Math.random() * 1000) / 1000),
+    ...variableTokenTypes,
 
-    varA: new ValuedTokenType("A", (context) => context.variables.A),
-    varB: new ValuedTokenType("B", (context) => context.variables.B),
-    varC: new ValuedTokenType("C", (context) => context.variables.C),
-    varD: new ValuedTokenType("D", (context) => context.variables.D),
-    varX: new ValuedTokenType("X", (context) => context.variables.X),
-    varY: new ValuedTokenType("Y", (context) => context.variables.Y),
-    varM: new ValuedTokenType("M", (context) => context.variables.M),
-    ans: new ValuedTokenType("Ans", (context) => context.variables.Ans),
+    ran: new ValuedTokenType("Ran#", () => Math.floor(Math.random() * 1000) / 1000),
 
     massProton: new ValuedTokenType("mp", "m_p", 1.672_621_777e-27),
     massNeutron: new ValuedTokenType("mn", "m_n", 1.674_927_351e-27),

@@ -83,6 +83,7 @@ class Variables {
         Object.assign(this, options);
     }
 };
+type VariableName = keyof Variables;
 
 class Context {
     mode: CalculationMode = CalculationMode.Comp;
