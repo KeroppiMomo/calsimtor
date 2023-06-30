@@ -31,7 +31,7 @@ class ValuedTokenType extends TokenType {
 }
 
 class VariableTokenType extends ValuedTokenType {
-    constructor(public varName: keyof typeof Variables.prototype) {
+    constructor(public varName: VariableName) {
         super(varName, (context) => context.variables[varName]);
     }
 }

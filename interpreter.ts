@@ -1,6 +1,12 @@
+type InterpreterIO = {
+    display: (context: Context, tokens: Token[], value: number, isDisp: boolean) => Promise<void>;
+    prompt: (context: Context, varName: VariableName) => Promise<number>;
+};
+
 type ExecContext = {
     iter: TokenIterator;
     context: Context;
+    io: InterpreterIO;
 };
 
 function expectNext(iter: TokenIterator, type: TokenType, failedMessage: string) {
@@ -34,67 +40,60 @@ function acceptAssignment({ iter }: ExecContext): VariableName {
     expectEnd(iter, "Assignment expects ending after variable");
     return varToken.type.varName;
 }
-async function meetPromptToken({ context, iter }: ExecContext): Promise<number> {
+async function meetPromptToken({ context, iter, io }: ExecContext): Promise<number> {
     iter.next();
-    const varName = acceptAssignment({ context, iter });
-    return await promptAssign(context, varName);
+    const varName = acceptAssignment({ context, iter, io });
+    const value = await io.prompt(context, varName);
+    context.variables[varName] = value;
+    return value;
 }
-async function meetExpressionToken({ context, iter }: ExecContext): Promise<number> {
+async function meetExpressionToken({ context, iter, io }: ExecContext): Promise<number> {
     const value = evaluateExpression(iter, context, false);
     context.variables.Ans = value;
     if (iter.isInBound() && iter.cur()!.type === programTokenTypes.assign) {
-        const varName = acceptAssignment({ context, iter });
+        const varName = acceptAssignment({ context, iter, io });
         context.variables[varName] = value;
     }
     return value;
 }
 
-async function interpret(tokens: Token[]) {
-    try {
-        const context = new Context();
-        if (tokens.length == 0) {
-            throw new RuntimeSyntaxError(new SourcePosition(0, 0, 0), 0, "Empty program");
-        }
-        while (true) {
-            const iter = new TokenIterator(tokens);
+async function interpret(tokens: Token[], context: Context, io: InterpreterIO) {
+    if (tokens.length == 0) {
+        throw new RuntimeSyntaxError(new SourcePosition(0, 0, 0), 0, "Empty program");
+    }
+    while (true) {
+        const iter = new TokenIterator(tokens);
 
-            const execContext = { iter, context };
+        const execContext = { iter, context, io };
 
-            while (iter.isInBound()) {
-                const oriI = iter.i;
-                let value: number;
-                if (iter.cur()!.type === programTokenTypes.prompt) {
-                    value = await meetPromptToken(execContext);
-                } else if (Object.values(expressionTokenTypes).includes(iter.cur()!.type)) {
-                    value = await meetExpressionToken(execContext);
-                } else {
-                    throwRuntime(RuntimeStackError, iter, "Unexpected token");
-                }
-
-                if (!iter.isInBound()) {
-                    await display(tokens.slice(oriI, iter.i), value, false);
-                } else if (iter.cur()!.type === programTokenTypes.separator) {
-                    iter.next();
-                    if (!iter.isInBound()) {
-                        await display(tokens.slice(oriI, iter.i-1), value, false);
-                    }
-                } else if (iter.cur()!.type === programTokenTypes.disp) {
-                    await display(tokens.slice(oriI, iter.i), value, true);
-                    iter.next();
-                    if (!iter.isInBound()) {
-                        await display([], value, false);
-                    }
-                } else {
-                    throwRuntime(RuntimeSyntaxError, iter, "Ending expected");
-                }
-            
+        while (iter.isInBound()) {
+            const oriI = iter.i;
+            let value: number;
+            if (iter.cur()!.type === programTokenTypes.prompt) {
+                value = await meetPromptToken(execContext);
+            } else if (Object.values(expressionTokenTypes).includes(iter.cur()!.type)) {
+                value = await meetExpressionToken(execContext);
+            } else {
+                throwRuntime(RuntimeStackError, iter, "Unexpected token");
             }
-        }
-    } catch (e: unknown) {
-        if (e instanceof RuntimeError) {
-            displayRuntimeError(e);
-        } else {
-            throw e;
+
+            if (!iter.isInBound()) {
+                await io.display(context, tokens.slice(oriI, iter.i), value, false);
+            } else if (iter.cur()!.type === programTokenTypes.separator) {
+                iter.next();
+                if (!iter.isInBound()) {
+                    await io.display(context, tokens.slice(oriI, iter.i-1), value, false);
+                }
+            } else if (iter.cur()!.type === programTokenTypes.disp) {
+                await io.display(context, tokens.slice(oriI, iter.i), value, true);
+                iter.next();
+                if (!iter.isInBound()) {
+                    await io.display(context, [], value, false);
+                }
+            } else {
+                throwRuntime(RuntimeSyntaxError, iter, "Ending expected");
+            }
+
         }
     }
 }

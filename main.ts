@@ -111,7 +111,7 @@ function displayRuntimeError(err: RuntimeError) {
     execution.appendChild(document.createElement("br"));
 }
 
-function promptAssign(context: Context, varName: keyof typeof Variables.prototype) {
+function promptInput(context: Context, varName: VariableName) {
     return new Promise<number>((resolve) => {
         const execution = document.getElementById("execution")!;
         execution.appendChild(document.createTextNode(varName + "?"));
@@ -142,7 +142,6 @@ function promptAssign(context: Context, varName: keyof typeof Variables.prototyp
                     }
                     try {
                         const val = evaluateExpression(new TokenIterator(tokens), context);
-                        context.variables[varName] = val;
                         sourceInput.readOnly = true;
                         resolve(val);
                     } catch (err: unknown) {
@@ -195,7 +194,7 @@ function display(tokens: Token[], val: number, disp=true) {
     });
 }
 
-let tokens = [];
+let tokens: Token[] = [];
 let errorPosition = [];
 function sourceOnInput(el: HTMLTextAreaElement) {
     const result = lexicalize(el.value);
@@ -205,4 +204,11 @@ function sourceOnInput(el: HTMLTextAreaElement) {
 
     (document.getElementById("tokenError")! as HTMLTextAreaElement).value = tokenLogToString(result, el.value);
     (document.getElementById("shown")! as HTMLTextAreaElement).value = tokensToString(tokens);
+}
+
+function executeOnClick() {
+    interpret(tokens, new Context(), {
+        display: (_, tokens, value, isDisp) => display(tokens, value, isDisp),
+        prompt: (context, varName) => promptInput(context, varName),
+    });
 }

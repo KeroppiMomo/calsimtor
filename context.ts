@@ -67,6 +67,15 @@ class SetupSettings {
     constructor(options: Partial<SetupSettings> = {}) {
         Object.assign(this, options);
     }
+
+    equals(other: SetupSettings): boolean {
+        return this.angle === other.angle
+            && this.displayDigits.kind === other.displayDigits.kind
+            && this.displayDigits.digits === other.displayDigits.digits
+            && this.fractionFormat === other.fractionFormat
+            && this.complexFormat === other.complexFormat
+            && this.frequencyOn === other.frequencyOn;
+    }
 }
 
 class Variables {
@@ -82,8 +91,19 @@ class Variables {
     constructor(options: Partial<Variables> = {}) {
         Object.assign(this, options);
     }
+
+    equals(other: Variables): boolean {
+        return this.A === other.A
+            && this.B === other.B
+            && this.C === other.C
+            && this.D === other.D
+            && this.X === other.X
+            && this.Y === other.Y
+            && this.M === other.M
+            && this.Ans === other.Ans;
+    }
 };
-type VariableName = keyof Variables;
+type VariableName = Exclude<keyof Variables, "equals">;
 
 class Context {
     mode: CalculationMode = CalculationMode.Comp;
@@ -92,5 +112,11 @@ class Context {
 
     constructor(options: Partial<Context> = {}) {
         Object.assign(this, options);
+    }
+
+    equals(other: Context): boolean {
+        return this.mode === other.mode
+            && this.setupSettings.equals(other.setupSettings)
+            && this.variables.equals(other.variables);
     }
 }

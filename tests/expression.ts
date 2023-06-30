@@ -1,6 +1,3 @@
-type TestCase = () => boolean;
-type TestCases = TestCase | TestCases[] | { [name: string]: TestCases };
-
 function testInput(input: string, context: Context = new Context()) {
     return () => {
         const { tokens, errorPosition } = lexicalize(input, expressionTokenTypes);
@@ -76,7 +73,7 @@ function normContext(x: 1 | 2): Context {
     return new Context({ setupSettings: new SetupSettings({ displayDigits: DisplayDigits.Norm(x) }) });
 }
 
-const allTestCases: TestCases = {
+const expressionTestCases: TestCases = {
     literal: {
         digits: [
             ...Array(10).fill(0).map((_, i) => expect(testInput(i.toString()), i)),
@@ -563,33 +560,3 @@ const allTestCases: TestCases = {
         ],
     },
 };
-
-function test(cases: TestCases) {
-    if (cases instanceof Array) { // []
-        for (let i=0; i < cases.length; ++i) {
-            console.group(`Test ${i}`);
-            test(cases[i]!);
-            console.groupEnd();
-        }
-    } else if (typeof cases === "object") { // {}
-        for (const name in cases) {
-            console.group(name);
-            test(cases[name]!);
-            console.groupEnd();
-        }
-    } else if (typeof cases === "function") { // TestCase
-        if (cases()) {
-            console.log("%cPassed", "color:green");
-        } else {
-            console.error("%c      Failed!      ", "color:white;background-color:red;font-weight:bold");
-        }
-    } else {
-        throw new Error("???");
-    }
-}
-
-function testAll() {
-    test(allTestCases);
-}
-
-// testAll();
