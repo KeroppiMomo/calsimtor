@@ -348,23 +348,37 @@ const expressionTokenTypes = {
 
     permutation: new TokenType("Per", "𝐏"),
     combination: new TokenType("Com", "𝐂"),
-};
 
-
-const programTokenTypes = {
-    clrMemory: new TokenType("ClrMemory"),
-
-    prompt: new TokenType("?"),
-    assign: new TokenType("->", "→"),
-    separator: new TokenType(":", ": "),
-    disp: new TokenType("disp", "◢ "),
-    fatArrow: new TokenType("=>", "⇒"),
     eq: new TokenType("="),
     neq: new TokenType("<>", "≠"),
     greater: new TokenType(">"),
     less: new TokenType("<"),
     geq: new TokenType(">=", "≥"),
     leq: new TokenType("<=", "≤"),
+
+    clrMemory: new TokenType("ClrMemory"),
+};
+
+const setupTokenTypes = {
+    deg: new TokenType("Deg"),
+    rad: new TokenType("Rad"),
+    gra: new TokenType("Gra"),
+    fix: new TokenType("Fix", "Fix "),
+    sci: new TokenType("Sci", "Sci "),
+    norm: new TokenType("Norm", "Norm "),
+    freqOn: new TokenType("FreqOn"),
+    freqOff: new TokenType("FreqOff"),
+};
+
+const programTokenTypes = {
+
+    ...setupTokenTypes,
+
+    prompt: new TokenType("?"),
+    assign: new TokenType("->", "→"),
+    separator: new TokenType(":", ": "),
+    disp: new TokenType("disp", "◢ "),
+    fatArrow: new TokenType("=>", "⇒"),
     goto: new TokenType("Goto", "Goto "),
     lbl: new TokenType("Lbl", "Lbl "),
     while: new TokenType("While", "While "),

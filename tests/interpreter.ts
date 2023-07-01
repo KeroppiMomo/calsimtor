@@ -22,10 +22,10 @@ class DisplayEvent {
     tokens: Token[] | null;
 
     constructor(
-        public context: Context | null,
-        tokensString: string | null,
-        public value: number | null,
-        public isDisp: boolean | null,
+        public context: Context | null = null,
+        tokensString: string | null = null,
+        public value: number | null = null,
+        public isDisp: boolean | null = null,
     ) {
         if (tokensString === null) {
             this.tokens = null;
@@ -44,7 +44,7 @@ class DisplayEvent {
         }
         if (this.tokens !== null) {
             if (this.tokens.length !== tokens.length || !this.tokens.every((t, i) => t.type === tokens[i]!.type)) {
-                throw new EventMismatchError(`Tokens mismatch: expected ${this.tokens}, got ${tokens}`);
+                throw new EventMismatchError(`Tokens mismatch: expected "${this.tokens.reduce((prev, cur) => prev + cur.shown, "")}", got "${tokens.reduce((prev, cur) => prev + cur.shown, "")}"`);
             }
         }
         if (this.value !== null && this.value !== value) {
@@ -57,9 +57,9 @@ class DisplayEvent {
 }
 class RuntimeErrorEvent {
     constructor(
-        public context: Context | null,
-        public ErrorClass: typeof RuntimeError | null,
-        public tokenI: number | null,
+        public context: Context | null = null,
+        public ErrorClass: typeof RuntimeError | null = null,
+        public tokenI: number | null = null,
     ) {}
 
     test(context: Context, error: RuntimeError) {
@@ -87,7 +87,7 @@ function expectInterpret(input: string, context: Context, ioEvents: InterpreterE
         let ioEventI = 0;
         async function prompt(context: Context, varName: VariableName): Promise<number> {
             const event = ioEvents[ioEventI];
-            if (!(event instanceof PromptEvent)) throw new EventMismatchError(`Expected a prompt event`);
+            if (!(event instanceof PromptEvent)) throw new EventMismatchError(`Unexpected prompt event`);
 
             const returns = event.testAndReturn(context, varName);
 
@@ -99,7 +99,7 @@ function expectInterpret(input: string, context: Context, ioEvents: InterpreterE
         async function display(context: Context, tokens: Token[], value: number, isDisp: boolean) {
             if (ioEventI >= ioEvents.length) throw new InterpreterBreakError();
             const event = ioEvents[ioEventI];
-            if (!(event instanceof DisplayEvent)) throw new EventMismatchError(`Expected a display event`);
+            if (!(event instanceof DisplayEvent)) throw new EventMismatchError(`Unexpected display event`);
 
             event.test(context, tokens, value, isDisp);
 
@@ -119,7 +119,7 @@ function expectInterpret(input: string, context: Context, ioEvents: InterpreterE
             } else if (err instanceof RuntimeError) {
                 try {
                     const event = ioEvents[ioEventI];
-                    if (!(event instanceof RuntimeErrorEvent)) throw new EventMismatchError(`Expected a runtime error event`);
+                    if (!(event instanceof RuntimeErrorEvent)) throw new EventMismatchError(`Unexpected runtime error event`);
                     event.test(context, err);
                     return true;
                 } catch (err: unknown) {
@@ -263,6 +263,77 @@ const interpreterTests: TestCases = {
             new DisplayEvent(new Context({ variables: new Variables({ A: 5, B: 8, C: 13, Ans: 13 }) }), "A+B -> C", 13, false),
         ]),
     ],
+
+    fatArrow: {
+        falseResult: [
+            expectInterpret("3 disp 0 => 1", new Context(), [
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "3", 3, true),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 0 }) }), "0 => 1", 0, false),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "3", 3, true),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 0 }) }), "0 => 1", 0, false),
+            ]),
+            expectInterpret("3 disp 0 => 1:", new Context(), [
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "3", 3, true),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 0 }) }), "0 => 1", 0, false),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "3", 3, true),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 0 }) }), "0 => 1", 0, false),
+            ]),
+            expectInterpret("3 disp 0 => 1 disp", new Context(), [
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "3", 3, true),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 0 }) }), "", 0, false),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "3", 3, true),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 0 }) }), "", 0, false),
+            ]),
+            expectInterpret("0 => 1 div 0", new Context(), [ new DisplayEvent() ]),
+            expectInterpret("0 => ,", new Context(), [ new DisplayEvent() ]),
+            expectInterpret("0 => =", new Context(), [ new DisplayEvent() ]),
+            expectInterpret("0 => 1 div 0 => 1 div 0", new Context(), [ new DisplayEvent() ]),
+            expectInterpret("3: 0 => =>", new Context(), [ new RuntimeErrorEvent(new Context(), RuntimeSyntaxError, 4) ]),
+            expectInterpret("0 => Goto", new Context(), [ new DisplayEvent() ]),
+            expectInterpret("0 => Lbl", new Context(), [ new DisplayEvent() ]),
+            expectInterpret("3: 0 => While 1", new Context(), [ new RuntimeErrorEvent(new Context(), RuntimeSyntaxError, 4) ]),
+            expectInterpret("3: 0 => While 1", new Context(), [ new RuntimeErrorEvent(new Context(), RuntimeSyntaxError, 4) ]),
+            expectInterpret("3: 0 => WhileEnd", new Context(), [ new RuntimeErrorEvent(new Context(), RuntimeSyntaxError, 4) ]),
+            expectInterpret("3: 0 => Next", new Context(), [ new RuntimeErrorEvent(new Context(), RuntimeSyntaxError, 4) ]),
+            expectInterpret("3: 0 => Break", new Context(), [ new DisplayEvent() ]),
+            expectInterpret("3: 0 => Else", new Context(), [ new RuntimeErrorEvent(new Context(), RuntimeSyntaxError, 4) ]),
+            expectInterpret("3: 0 => To", new Context(), [ new DisplayEvent() ]),
+
+            expectInterpret("3: 0 => 1 disp 5", new Context(), [ new DisplayEvent(null, "5", 5, false) ]),
+            expectInterpret("3: 0 => 1: 5", new Context(), [ new DisplayEvent(null, "5", 5, false) ]),
+        ],
+        trueResult: [
+            expectInterpret("3 disp 1 => 5", new Context(), [
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "3", 3, true),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 5 }) }), "1 => 5", 5, false),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "3", 3, true),
+            ]),
+            expectInterpret("1 => 5:", new Context(), [
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 5 }) }), "1 => 5", 5, false),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 5 }) }), "1 => 5", 5, false),
+            ]),
+            expectInterpret("1 => 5 disp", new Context(), [
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 5 }) }), "1 => 5", 5, true),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 5 }) }), "", 5, false),
+            ]),
+            expectInterpret("1 => 2 => 3", new Context(), [ new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "1 => 2 => 3", 3, false) ]),
+            expectInterpret("1 => 2 => 3 disp", new Context(), [
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "1 => 2 => 3", 3, true),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "", 3, false),
+            ]),
+            expectInterpret("1 => 0 => 3", new Context(), [ new DisplayEvent(new Context(), "1 => 0 => 3", 0, false) ]),
+            expectInterpret("1 => 0 => 3 disp 8", new Context(), [ new DisplayEvent(new Context({ variables: new Variables({ Ans: 8 }) }), "8", 8, false) ]),
+            expectInterpret("1-3 => ? -> A", new Context(), [
+                new PromptEvent(new Context({ variables: new Variables({ Ans: -2 }) }), "A", 5),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: -2, A: 5 }) }), "? -> A", 5, false),
+            ]),
+            expectInterpret("5 => -8 => ? -> M disp", new Context(), [
+                new PromptEvent(new Context({ variables: new Variables({ Ans: -8 }) }), "M", 10),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: -8, M: 10 }) }), "? -> M", 10, true),
+                new DisplayEvent(new Context({ variables: new Variables({ Ans: -8, M: 10 }) }), "", 10, false),
+            ]),
+        ],
+    },
 };
 
 function testInterpreter() {
