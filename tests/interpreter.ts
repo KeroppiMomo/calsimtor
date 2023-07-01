@@ -187,6 +187,82 @@ const interpreterTests: TestCases = {
             expectInterpret("? -> Ans ->", new Context(), [ new RuntimeErrorEvent(new Context(), RuntimeSyntaxError, 2) ]),
         ],
     },
+
+    expression: [
+        expectInterpret("1+2", new Context(), [
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "1+2", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "1+2", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "1+2", 3, false),
+        ]),
+        expectInterpret("1+2:", new Context(), [
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "1+2", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "1+2", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "1+2", 3, false),
+        ]),
+        expectInterpret("1+2 disp", new Context(), [
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "1+2", 3, true),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "1+2", 3, true),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "", 3, false),
+        ]),
+        expectInterpret("log(10", new Context(), [
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 1 }) }), "log(10", 1, false),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 1 }) }), "log(10", 1, false),
+        ]),
+        expectInterpret("log(10:", new Context(), [
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 1 }) }), "log(10", 1, false),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 1 }) }), "log(10", 1, false),
+        ]),
+        expectInterpret("log(10 disp", new Context(), [
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 1 }) }), "log(10", 1, true),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 1 }) }), "", 1, false),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 1 }) }), "log(10", 1, true),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 1 }) }), "", 1, false),
+        ]),
+        expectInterpret("6: 1 div 0 disp", new Context(), [ new RuntimeErrorEvent(new Context({ variables: new Variables({ Ans: 6 }) }), RuntimeMathError, 5) ]),
+        expectInterpret("6: 1 div 0", new Context(), [ new RuntimeErrorEvent(new Context({ variables: new Variables({ Ans: 6 }) }), RuntimeMathError, 5) ]),
+        expectInterpret("Ans+3", new Context(), [
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 3 }) }), "Ans+3", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 6 }) }), "Ans+3", 6, false),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 9 }) }), "Ans+3", 9, false),
+        ]),
+        expectInterpret("5: ? -> A: Ans + A", new Context(), [
+            new PromptEvent(new Context({ variables: new Variables({ Ans: 5 }) }), "A", 3),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 8, A: 3 }) }), "Ans + A", 8, false),
+            new PromptEvent(new Context({ variables: new Variables({ Ans: 5, A: 3 }) }), "A", 7),
+            new DisplayEvent(new Context({ variables: new Variables({ Ans: 12, A: 7 }) }), "Ans + A", 12, false),
+        ]),
+    ],
+
+    assignment: [
+        expectInterpret("1+2 -> A", new Context(), [
+            new DisplayEvent(new Context({ variables: new Variables({ A: 3, Ans: 3 }) }), "1+2 -> A", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 3, Ans: 3 }) }), "1+2 -> A", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 3, Ans: 3 }) }), "1+2 -> A", 3, false),
+        ]),
+        expectInterpret("1+2 -> A:", new Context(), [
+            new DisplayEvent(new Context({ variables: new Variables({ A: 3, Ans: 3 }) }), "1+2 -> A", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 3, Ans: 3 }) }), "1+2 -> A", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 3, Ans: 3 }) }), "1+2 -> A", 3, false),
+        ]),
+        expectInterpret("1+2 -> A disp", new Context(), [
+            new DisplayEvent(new Context({ variables: new Variables({ A: 3, Ans: 3 }) }), "1+2 -> A", 3, true),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 3, Ans: 3 }) }), "", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 3, Ans: 3 }) }), "1+2 -> A", 3, true),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 3, Ans: 3 }) }), "", 3, false),
+        ]),
+        expectInterpret("1+2 -> Ans", new Context(), [ new RuntimeErrorEvent(new Context({ variables: new Variables({ Ans: 3 }) }), RuntimeSyntaxError, 4) ]),
+        expectInterpret("1+2 -> A6", new Context(), [ new RuntimeErrorEvent(new Context({ variables: new Variables({ A: 0, Ans: 3 }) }), RuntimeSyntaxError, 5) ]),
+        expectInterpret("5 -> A: 1 div 0 -> A:", new Context(), [ new RuntimeErrorEvent(new Context({ variables: new Variables({ A: 5, Ans: 5 }) }), RuntimeMathError, 7) ]),
+        expectInterpret("B -> A: C -> B: A+B -> C", new Context({ variables: new Variables({ C: 1 }) }), [
+            new DisplayEvent(new Context({ variables: new Variables({ A: 0, B: 1, C: 1, Ans: 1 }) }), "A+B -> C", 1, false),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 1, B: 1, C: 2, Ans: 2 }) }), "A+B -> C", 2, false),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 1, B: 2, C: 3, Ans: 3 }) }), "A+B -> C", 3, false),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 2, B: 3, C: 5, Ans: 5 }) }), "A+B -> C", 5, false),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 3, B: 5, C: 8, Ans: 8 }) }), "A+B -> C", 8, false),
+            new DisplayEvent(new Context({ variables: new Variables({ A: 5, B: 8, C: 13, Ans: 13 }) }), "A+B -> C", 13, false),
+        ]),
+    ],
 };
 
 function testInterpreter() {
