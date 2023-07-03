@@ -99,7 +99,7 @@ class ParenFuncTokenType<ArgNum extends ParenFuncArgNum> extends TokenType {
     }
 }
 
-const literalTokenTypes = {
+const digitTokenTypes = {
     num0: new TokenType("0"),
     num1: new TokenType("1"),
     num2: new TokenType("2"),
@@ -110,6 +110,9 @@ const literalTokenTypes = {
     num7: new TokenType("7"),
     num8: new TokenType("8"),
     num9: new TokenType("9"),
+};
+const literalTokenTypes = {
+    ...digitTokenTypes,
 
     exp: new TokenType("E"),
     dot: new TokenType("."),

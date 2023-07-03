@@ -33,6 +33,8 @@ class RuntimeError extends Error {
 class RuntimeSyntaxError extends RuntimeError {}
 class RuntimeMathError extends RuntimeError {}
 class RuntimeStackError extends RuntimeError {}
+class RuntimeArgumentError extends RuntimeError {}
+class RuntimeGotoError extends RuntimeError {}
 
 type LexicalizationResult = {
     tokens: Token[];
