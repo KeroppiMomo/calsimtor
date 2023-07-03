@@ -560,3 +560,9 @@ const expressionTestCases: TestCases = {
         ],
     },
 };
+
+function testExpression() {
+    test(expressionTestCases);
+}
+
+testExpression();

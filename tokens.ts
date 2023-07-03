@@ -8,6 +8,12 @@ class TokenType {
     }
 }
 
+class DigitTokenType extends TokenType {
+    constructor(public digit: number) {
+        super(digit.toString());
+    }
+}
+
 type ValuedFunc = (context: Context) => number;
 class ValuedTokenType extends TokenType {
     fn: ValuedFunc;
@@ -100,16 +106,16 @@ class ParenFuncTokenType<ArgNum extends ParenFuncArgNum> extends TokenType {
 }
 
 const digitTokenTypes = {
-    num0: new TokenType("0"),
-    num1: new TokenType("1"),
-    num2: new TokenType("2"),
-    num3: new TokenType("3"),
-    num4: new TokenType("4"),
-    num5: new TokenType("5"),
-    num6: new TokenType("6"),
-    num7: new TokenType("7"),
-    num8: new TokenType("8"),
-    num9: new TokenType("9"),
+    num0: new DigitTokenType(0),
+    num1: new DigitTokenType(1),
+    num2: new DigitTokenType(2),
+    num3: new DigitTokenType(3),
+    num4: new DigitTokenType(4),
+    num5: new DigitTokenType(5),
+    num6: new DigitTokenType(6),
+    num7: new DigitTokenType(7),
+    num8: new DigitTokenType(8),
+    num9: new DigitTokenType(9),
 };
 const literalTokenTypes = {
     ...digitTokenTypes,
@@ -363,12 +369,12 @@ const expressionTokenTypes = {
 };
 
 const setupTokenTypes = {
-    deg: new TokenType("Deg"),
-    rad: new TokenType("Rad"),
-    gra: new TokenType("Gra"),
-    fix: new TokenType("Fix", "Fix "),
-    sci: new TokenType("Sci", "Sci "),
-    norm: new TokenType("Norm", "Norm "),
+    degMode: new TokenType("Deg"),
+    radMode: new TokenType("Rad"),
+    graMode: new TokenType("Gra"),
+    fixMode: new TokenType("Fix", "Fix "),
+    sciMode: new TokenType("Sci", "Sci "),
+    normMode: new TokenType("Norm", "Norm "),
     freqOn: new TokenType("FreqOn"),
     freqOff: new TokenType("FreqOff"),
 };

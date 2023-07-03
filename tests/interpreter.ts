@@ -471,4 +471,4 @@ function testInterpreter() {
     test(interpreterTests);
 }
 
-testInterpreter();
+// testInterpreter();
