@@ -10,6 +10,7 @@ enum Precedence {
     closeBracket = -1, // don't really know if the order matters
     L1 = 1, //
     L2,
+    /** Precedence of =, <>, <, >, <=, >= */
     L3,
     /** Precedence of +, - */
     L4,
@@ -25,7 +26,7 @@ enum Precedence {
     L9,
     /** Precedence of frac */
     L10,
-    /** Precedence of suffix functions */
+    /** Precedence of suffix functions, power, root */
     L11,
 }
 
@@ -246,13 +247,16 @@ class EvalStacks {
 }
 
 // Helper functions
-function handleInfixOperator(evalContext: EvalContext, tokenType: TokenType, pre: Precedence, fn: BinaryFunction) {
+function handleInfixOperator(evalContext: EvalContext, tokenType: TokenType, pre: Precedence, fn: InfixFunc) {
     const { evalStacks, iter } = evalContext;
     if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found an infix operator instead");
     evalStacks.evalUntil(evalContext, pre);
     evalStacks.command.push({
         tokenType: tokenType,
-        cmd: binaryCommand(pre, fn),
+        cmd: binaryCommand(
+            pre,
+            (l, r, throwRuntime, context) => fn((msg) => throwRuntime(RuntimeMathError, msg), context, l, r)
+        ),
     });
     evalStacks.numeric.pushPlaceholder();
 }
@@ -349,7 +353,7 @@ function meetPlusToken({ evalStacks, iter, context }: EvalContext) {
     if (evalStacks.numeric.isPlaceholder()) {
         // nothing happens: more than 24 + does not cause STACK error
     } else {
-        handleInfixOperator({ evalStacks, iter, context }, allTokenTypes.plus, Precedence.L4, (left, right) => left + right);
+        handleInfixOperator({ evalStacks, iter, context }, allTokenTypes.plus, Precedence.L4, (_, __, l, r) => l + r);
     }
 }
 function meetPrefixMinus({ evalStacks }: EvalContext) {
@@ -359,7 +363,7 @@ function meetPrefixMinus({ evalStacks }: EvalContext) {
     });
 }
 function meetInfixMinus(evalContext: EvalContext) {
-    handleInfixOperator(evalContext, allTokenTypes.minus, Precedence.L4, (left, right) => left - right);
+    handleInfixOperator(evalContext, allTokenTypes.minus, Precedence.L4, (_, __, l, r) => l - r);
 }
 function meetMinusToken({ evalStacks, iter, context }: EvalContext) {
     if (evalStacks.numeric.isPlaceholder()) {
@@ -375,43 +379,18 @@ function meetNegToken({ evalStacks, iter, context }: EvalContext) {
 
 // Multiply and divide
 function meetMultiplyToken(evalContext: EvalContext) {
-    handleInfixOperator(evalContext, allTokenTypes.multiply, Precedence.L5, (l, r) => l*r);
+    handleInfixOperator(evalContext, allTokenTypes.multiply, Precedence.L5, allTokenTypes.multiply.fn);
 }
 function meetDivideToken(evalContext: EvalContext) {
-    handleInfixOperator(evalContext, allTokenTypes.divide, Precedence.L5, (l, r, throwRuntime) => {
-        if (r === 0) throwRuntime(RuntimeMathError, "Division by 0");
-        return l/r;
-    });
+    handleInfixOperator(evalContext, allTokenTypes.divide, Precedence.L5, allTokenTypes.divide.fn);
 }
 
 // Permutation and combination
-function validatePerComArguments(n: number, r: number, throwMath: (msg: string) => void) {
-    if (!Number.isInteger(n) || !Number.isInteger(r)) throwMath("n and r in nPr must be integer");
-    if (!(0 <= r)) throwMath("r cannot be negative in nPr");
-    if (!(r <= n)) throwMath("n must be no less than r in nPr");
-    if (!(n < Math.pow(10, 10))) throwMath("n must be less than 10^10 in nPr");
-}
 function meetPermutationToken(evalContext: EvalContext) {
-    handleInfixOperator(evalContext, allTokenTypes.permutation, Precedence.L6, (n, r, throwRuntime) => {
-        validatePerComArguments(n, r, (msg) => throwRuntime(RuntimeMathError, msg));
-
-        let ans = 1;
-        for (let k = 0; k < r; ++k) {
-            ans *= n-k;
-        }
-        return ans;
-    });
+    handleInfixOperator(evalContext, allTokenTypes.permutation, Precedence.L6, allTokenTypes.permutation.fn);
 }
 function meetCombinationToken(evalContext: EvalContext) {
-    handleInfixOperator(evalContext, allTokenTypes.permutation, Precedence.L6, (n, r, throwRuntime) => {
-        validatePerComArguments(n, r, (msg) => throwRuntime(RuntimeMathError, msg));
-
-        let ans = 1;
-        for (let k = 0; k < r; ++k) {
-            ans = ans * (n-k) / (k+1);
-        }
-        return ans;
-    });
+    handleInfixOperator(evalContext, allTokenTypes.permutation, Precedence.L6, allTokenTypes.combination.fn);
 }
 
 // Fraction
@@ -461,6 +440,55 @@ function meetFractionToken(evalContext: EvalContext) {
             },
         });
     }
+    evalStacks.numeric.pushPlaceholder();
+}
+
+// Power
+function meetPowerToken(evalContext: EvalContext) {
+    const { evalStacks, iter } = evalContext;
+    if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found power instead");
+    evalStacks.evalUntil(evalContext, Precedence.L11);
+
+    evalStacks.command.push({
+        tokenType: allTokenTypes.power,
+        cmd: ({ evalStacks: st, context }, pre, throwRuntime) => {
+            if (pre !== Precedence.comma && pre !== Precedence.closeBracket && pre !== Precedence.lowest) return false;
+
+            if (st.numeric.length < 2) throw new Error("Power command expects >=2 elements in the numeric stack");
+            const r = st.numeric.popNumber();
+            const l = st.numeric.popNumber();
+            st.numeric.push(allTokenTypes.power.fn((msg) => throwRuntime(RuntimeMathError, msg), context, l, r));
+            st.command.pop();
+
+            if (pre === Precedence.closeBracket) return false;
+
+            return true;
+        },
+    });
+    evalStacks.numeric.pushPlaceholder();
+}
+
+function meetRootToken(evalContext: EvalContext) {
+    const { evalStacks, iter } = evalContext;
+    if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found root instead");
+    evalStacks.evalUntil(evalContext, Precedence.L11);
+
+    evalStacks.command.push({
+        tokenType: allTokenTypes.power,
+        cmd: ({ evalStacks: st, context }, pre, throwRuntime) => {
+            if (pre !== Precedence.comma && pre !== Precedence.closeBracket && pre !== Precedence.lowest) return false;
+
+            if (st.numeric.length < 2) throw new Error("Root command expects >=2 elements in the numeric stack");
+            const r = st.numeric.popNumber();
+            const l = st.numeric.popNumber();
+            st.numeric.push(allTokenTypes.root.fn((msg) => throwRuntime(RuntimeMathError, msg), context, l, r));
+            st.command.pop();
+
+            if (pre === Precedence.closeBracket) return false;
+
+            return true;
+        },
+    });
     evalStacks.numeric.pushPlaceholder();
 }
 
@@ -518,14 +546,18 @@ function meetCommaToken(evalContext: EvalContext) {
     const { evalStacks, iter } = evalContext;
     if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found comma instead");
     evalStacks.evalUntil(evalContext, Precedence.comma);
-    if (evalStacks.command.length === 0 || !(evalStacks.command.last.tokenType instanceof ParenFuncTokenType))
+    if (evalStacks.command.length === 0)
+        throwRuntime(RuntimeSyntaxError, iter, "Found comma at top level");
+    const lastType = evalStacks.command.last.tokenType;
+    if (!(lastType instanceof ParenFuncTokenType || lastType instanceof InfixParenFuncTokenType))
         throwRuntime(RuntimeSyntaxError, iter, "Found comma at top level");
     evalStacks.numeric.pushPlaceholder();
 }
 function meetCloseBracketToken(evalContext: EvalContext) {
     const { evalStacks, iter } = evalContext;
     if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found close bracket instead");
-    if (!evalStacks.command.raw.some((cmdEl) => cmdEl.tokenType instanceof ParenFuncTokenType)) throwRuntime(RuntimeSyntaxError, iter, "Found close bracket at top level");
+    if (!evalStacks.command.raw.some((cmdEl) => cmdEl.tokenType instanceof ParenFuncTokenType || cmdEl.tokenType instanceof InfixFuncTokenType))
+        throwRuntime(RuntimeSyntaxError, iter, "Found close bracket at top level");
     evalStacks.evalUntil(evalContext, Precedence.closeBracket);
 }
 
@@ -568,6 +600,12 @@ function evaluateExpression(iter: TokenIterator, context: Context = new Context(
                     break;
                 case allTokenTypes.frac:
                     meetFractionToken(evalContext);
+                    break;
+                case allTokenTypes.power:
+                    meetPowerToken(evalContext);
+                    break;
+                case allTokenTypes.root:
+                    meetRootToken(evalContext);
                     break;
                 case allTokenTypes.comma:
                     meetCommaToken(evalContext);

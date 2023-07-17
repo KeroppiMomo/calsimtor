@@ -64,6 +64,29 @@ class SuffixFuncTokenType extends TokenType {
     }
 }
 
+type InfixFunc = (throwMath: ThrowMsg, context: Context, l: number, r: number) => number;
+class InfixFuncTokenType extends TokenType {
+    fn: InfixFunc;
+
+    constructor(source: string, shown: string, fn: InfixFunc);
+    constructor(source: string, fn: InfixFunc);
+    constructor(source: string, arg1: string | InfixFunc, arg2?: InfixFunc) {
+        if (arg2 !== undefined) {
+            // 1st definiiton
+            const shown = arg1 as string;
+            super(source, shown);
+            this.fn = arg2;
+        } else {
+            // 2nd definition
+            super(source, undefined);
+            this.fn = arg1 as InfixFunc;
+        }
+    }
+}
+class InfixParenFuncTokenType extends InfixFuncTokenType {
+    stuff: boolean = true;
+}
+
 type ArrayOfLength<T, N extends number, Arr extends T[] = []> =
     Arr["length"] extends N
     ? Arr | (N extends Arr["length"]
@@ -222,6 +245,50 @@ const suffixFuncTokenTypes = {
     asG: new SuffixFuncTokenType("asG", "ᵍ", (_, context, x) => x * angleUnitToRad(AngleUnit.Gra) / angleUnitToRad(context.setupSettings.angle)),
 };
 
+const relationTokenTypes = {
+    eq: new InfixFuncTokenType("=", (_, __, l, r) => (l-r === 0) ? 1 : 0),
+    neq: new InfixFuncTokenType("<>", "≠", (_, __, l, r) => (l-r !== 0) ? 1 : 0),
+    greater: new InfixFuncTokenType(">", (_, __, l, r) => (l-r > 0) ? 1 : 0),
+    less: new InfixFuncTokenType("<", (_, __, l, r) => (l-r < 0) ? 1 : 0),
+    geq: new InfixFuncTokenType(">=", "≥", (_, __, l, r) => (l-r >= 0) ? 1 : 0),
+    leq: new InfixFuncTokenType("<=", "≤", (_, __, l, r) => (l-r <= 0) ? 1 : 0),
+};
+
+function validatePerComArguments(n: number, r: number, throwMath: (msg: string) => void) {
+    if (!Number.isInteger(n) || !Number.isInteger(r)) throwMath("n and r in nPr must be integer");
+    if (!(0 <= r)) throwMath("r cannot be negative in nPr");
+    if (!(r <= n)) throwMath("n must be no less than r in nPr");
+    if (!(n < Math.pow(10, 10))) throwMath("n must be less than 10^10 in nPr");
+}
+const infixFuncTokenTypes = {
+    ...relationTokenTypes,
+
+    multiply: new InfixFuncTokenType("*", (_, __, l, r) => l*r),
+    divide: new InfixFuncTokenType("div", "÷", (throwMath, __, l, r) => {
+        if (r === 0) throwMath("Division by 0");
+        return l/r;
+    }),
+
+    permutation: new InfixFuncTokenType("Per", "𝐏", (throwMath, _, n, r) => {
+        validatePerComArguments(n, r, throwMath);
+
+        let ans = 1;
+        for (let k = 0; k < r; ++k) {
+            ans *= n-k;
+        }
+        return ans;
+    }),
+    combination: new InfixFuncTokenType("Com", "𝐂", (throwMath, _, n, r) => {
+        validatePerComArguments(n, r, throwMath);
+
+        let ans = 1;
+        for (let k = 0; k < r; ++k) {
+            ans = ans * (n-k) / (k+1);
+        }
+        return ans;
+    }),
+};
+
 const parenFuncTokenTypes = {
     cbrt: new ParenFuncTokenType("cbrt(", "³√(", 1, (_, __, x) => Math.cbrt(x)),
     sqrt: new ParenFuncTokenType("sqrt(", "√(", 1, (throwMath, _, x) => {
@@ -331,13 +398,10 @@ const expressionTokenTypes = {
     ...literalTokenTypes,
     ...valuedTokenTypes,
     ...suffixFuncTokenTypes,
+    ...infixFuncTokenTypes,
     ...parenFuncTokenTypes,
 
     frac: new TokenType("/", "┘"),
-
-    power: new TokenType("^("),
-
-    root: new TokenType("rt(", "x√"),
 
     neg: new TokenType("neg", "-"),
 
@@ -352,18 +416,16 @@ const expressionTokenTypes = {
 
     plus: new TokenType("+"),
     minus: new TokenType("-"),
-    multiply: new TokenType("*"),
-    divide: new TokenType("div", "÷"),
 
-    permutation: new TokenType("Per", "𝐏"),
-    combination: new TokenType("Com", "𝐂"),
+    power: new InfixParenFuncTokenType("^(", (throwMath, _, l, r) => {
+        // TODO deal with fractional power of negative number
+        return Math.pow(l, r);
+    }),
 
-    eq: new TokenType("="),
-    neq: new TokenType("<>", "≠"),
-    greater: new TokenType(">"),
-    less: new TokenType("<"),
-    geq: new TokenType(">=", "≥"),
-    leq: new TokenType("<=", "≤"),
+    root: new InfixParenFuncTokenType("rt(", "x√(", (throwMath, _, l, r) => {
+        // TODO deal with fractional power of negative number
+        return Math.pow(r, 1/l);
+    }),
 
     clrMemory: new TokenType("ClrMemory"),
 };

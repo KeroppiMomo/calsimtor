@@ -298,6 +298,29 @@ const expressionTestCases: TestCases = {
             expect(testInput(limitNumStack(2) + "10 Com 3"), 129),
         ],
     },
+    power: [
+        expect(testInput("2*^("), RuntimeSyntaxError, 2),
+        expect(testInput("^("), RuntimeSyntaxError, 0),
+        expect(testInput("4^(3^2"), 262144),
+        expect(testInput("4^(3^2)"), 262144),
+        expect(testInput("4^(3^2,"), RuntimeSyntaxError, 4),
+        expect(testInput("4^(3^(4-2"), 262144),
+        expect(testInput("4^(3^(4-2)"), 262144),
+        expect(testInput("4^(3^(4-2))"), 262144),
+        expect(testInput("2^(3,5"), RuntimeSyntaxError, 3),
+        expect(testInput("log(2^(4,2"), 0.25),
+        expect(testInput("log(2^(4,2)"), 0.25),
+        expect(testInput("log(2^(4,2))"), RuntimeSyntaxError, 7),
+        expect(testInput("log(2^(4,2,"), RuntimeSyntaxError, 6),
+        expect(testInput("(5*2)^(log(100"), 100),
+        expect(testInput("(5*2)^(log(2,8"), 1000),
+    ],
+    root: [
+        expect(testInput("rt("), RuntimeSyntaxError, 0),
+        expect(testInput("2*rt("), RuntimeSyntaxError, 2),
+        expect(testInput("4rt(81"), 3),
+        // TODO
+    ],
     fraction: {
         evaluation: [
             expect(testInput("1/2"), 0.5),
