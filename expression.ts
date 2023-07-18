@@ -43,80 +43,6 @@ class TokenIterator {
     isInBound(): boolean { return this.i >= 0 && this.i < this.tokens.length; }
 }
 
-function acceptLiteral(iter: TokenIterator): number {
-    function isTokenNumber(token: Token): boolean {
-        return Object.values(literalTokenTypes).includes(token.type) && token.type !== literalTokenTypes.exp && token.type !== literalTokenTypes.dot;
-    }
-    function tokenToNumber(token: Token): number {
-        return parseInt(token.source);
-    }
-
-    const NEG_TYPE = [ allTokenTypes.minus, allTokenTypes.neg ];
-    const POS_TYPE = [ allTokenTypes.plus ];
-
-    let significand = 0;
-    let exp = 0;
-
-    // ((xxxxx)(.xxxxxx))(E(-)xx)
-
-    if (iter.cur()!.type === literalTokenTypes.exp) {
-        significand = 1;
-    }
-
-    for (; iter.isInBound() && isTokenNumber(iter.cur()!); iter.next()) {
-        significand = significand * 10 + tokenToNumber(iter.cur()!);
-    }
-    // Decimal point
-    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.dot) {
-        iter.next();
-        for (let j = 1; iter.isInBound() && isTokenNumber(iter.cur()!); iter.next(), ++j) {
-            significand += tokenToNumber(iter.cur()!) * Math.pow(10, -j);
-        }
-    }
-    // Exponent
-    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.exp) {
-        iter.next();
-
-        let sign = +1;
-        for (; iter.isInBound(); iter.next()) {
-            if (NEG_TYPE.includes(iter.cur()!.type)) sign *= -1;
-            else if (POS_TYPE.includes(iter.cur()!.type)) {}
-            else break;
-        }
-
-        if (!(iter.isInBound() && isTokenNumber(iter.cur()!))) throwRuntime(RuntimeSyntaxError, iter, "Missing number after exp");
-        exp = tokenToNumber(iter.cur()!);
-        iter.next();
-
-        if (iter.isInBound() && isTokenNumber(iter.cur()!)) {
-            exp = exp * 10 + tokenToNumber(iter.cur()!);
-            iter.next();
-
-            if (iter.isInBound() && isTokenNumber(iter.cur()!)) throwRuntime(RuntimeSyntaxError, iter, "Exponents cannot have more than 2 numbers");
-        }
-
-        exp *= sign;
-    }
-
-    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.dot)
-        throwRuntime(RuntimeSyntaxError, iter, "Dot is not allowed in exponent or after another dot");
-    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.exp)
-        throwRuntime(RuntimeSyntaxError, iter, "Literal cannot have more than one Exp");
-
-    iter.prev();
-    return significand * Math.pow(10, exp);
-}
-
-class StackOverflowError<T> extends Error {
-    constructor(
-        public target: LengthLimitedStack<T>,
-        message?: string | undefined,
-    ) {
-        super(message);
-        this.name = "StackOverflowError";
-    }
-}
-
 class StackEmptyError<T> extends Error {
     constructor(
         public target: LengthLimitedStack<T>,
@@ -124,6 +50,15 @@ class StackEmptyError<T> extends Error {
     ) {
         super(message);
         this.name = "StackEmptyError";
+    }
+}
+class StackOverflowError<T> extends Error {
+    constructor(
+        public target: LengthLimitedStack<T>,
+        message?: string | undefined,
+    ) {
+        super(message);
+        this.name = "StackOverflowError";
     }
 }
 
@@ -155,12 +90,6 @@ class LengthLimitedStack<T> {
     }
 }
 
-type EvalContext = {
-    evalStacks: EvalStacks,
-    iter: TokenIterator,
-    context: Context,
-};
-
 /**
  * returns whether to propagate further in the stack
  */
@@ -169,29 +98,6 @@ type CommandStackElement = {
     tokenType: TokenType | null,
     cmd: Command
 };
-
-type UnaryFunction = (x: number, throwRuntime: ThrowLocalRuntime, context: Context) => number;
-function unaryCommand(cmdPrecedence: Precedence, fn: UnaryFunction): Command {
-    return ({ evalStacks: st, context }: EvalContext, pre: Precedence, throwRuntime: ThrowLocalRuntime) => {
-        if (pre > cmdPrecedence) return false;
-        if (st.numeric.length === 0) throw new Error("Unary command expects at least one element in the numeric stack");
-        st.numeric.push(fn(st.numeric.popNumber(), throwRuntime, context));
-        st.command.pop();
-        return true;
-    };
-}
-type BinaryFunction = (left: number, right: number, throwRuntime: ThrowLocalRuntime, context: Context) => number;
-function binaryCommand(cmdPrecedence: Precedence, fn: BinaryFunction): Command {
-    return ({ evalStacks: st, context }: EvalContext, pre: Precedence, throwRuntime: ThrowLocalRuntime) => {
-        if (pre > cmdPrecedence) return false;
-        if (st.numeric.length < 2) throw new Error("Binary command expects >=2 elemens in the numeric stack");
-        const right = st.numeric.popNumber();
-        const left = st.numeric.popNumber();
-        st.numeric.push(fn(left, right, throwRuntime, context));
-        st.command.pop();
-        return true;
-    };
-}
 
 class CommandStack extends LengthLimitedStack<CommandStackElement> {
     static readonly SIZE = 24;
@@ -246,17 +152,138 @@ class EvalStacks {
     }
 }
 
+type EvalContext = {
+    evalStacks: EvalStacks,
+    iter: TokenIterator,
+    context: Context,
+};
+
+function acceptLiteral(iter: TokenIterator): number {
+    const NEG_TYPE = [ allTokenTypes.minus, allTokenTypes.neg ];
+    const POS_TYPE = [ allTokenTypes.plus ];
+
+    function isCurDigit(): boolean {
+        return iter.cur()!.type instanceof DigitTokenType;
+    }
+    function curDigitValue(): number {
+        const type = iter.cur()!.type;
+        if (type instanceof DigitTokenType) return type.value;
+        else throw new Error("Expect digit token type");
+    }
+
+    let significand = 0;
+    let exp = 0;
+
+    // ((xxxxx)(.xxxxxx))(E(-)xx)
+
+    if (iter.cur()!.type === literalTokenTypes.exp) {
+        significand = 1;
+    }
+
+    for (; iter.isInBound() && isCurDigit(); iter.next()) {
+        significand = significand * 10 + curDigitValue()!;
+    }
+    // Decimal point
+    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.dot) {
+        iter.next();
+        for (let j = 1; iter.isInBound() && isCurDigit(); iter.next(), ++j) {
+            significand += curDigitValue() * Math.pow(10, -j);
+        }
+    }
+    // Exponent
+    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.exp) {
+        iter.next();
+
+        let sign = +1;
+        for (; iter.isInBound(); iter.next()) {
+            if (NEG_TYPE.includes(iter.cur()!.type)) sign *= -1;
+            else if (POS_TYPE.includes(iter.cur()!.type)) {}
+            else break;
+        }
+
+        if (!(iter.isInBound() && isCurDigit())) throwRuntime(RuntimeSyntaxError, iter, "Missing number after exp");
+        exp = curDigitValue();
+        iter.next();
+
+        if (iter.isInBound() && isCurDigit()) {
+            exp = exp * 10 + curDigitValue();
+            iter.next();
+
+            if (iter.isInBound() && isCurDigit()) throwRuntime(RuntimeSyntaxError, iter, "Exponents cannot have more than 2 numbers");
+        }
+
+        exp *= sign;
+    }
+
+    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.dot)
+        throwRuntime(RuntimeSyntaxError, iter, "Dot is not allowed in exponent or after another dot");
+    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.exp)
+        throwRuntime(RuntimeSyntaxError, iter, "Literal cannot have more than one Exp");
+
+    iter.prev();
+    return significand * Math.pow(10, exp);
+}
+
+type UnaryFunction = (x: number, throwRuntime: ThrowLocalRuntime, context: Context) => number;
+function unaryCommand(cmdPrecedence: Precedence, fn: UnaryFunction): Command {
+    return ({ evalStacks: st, context }: EvalContext, pre: Precedence, throwRuntime: ThrowLocalRuntime) => {
+        if (pre > cmdPrecedence) return false;
+        if (st.numeric.length === 0) throw new Error("Unary command expects at least one element in the numeric stack");
+        st.numeric.push(fn(st.numeric.popNumber(), throwRuntime, context));
+        st.command.pop();
+        return true;
+    };
+}
+type BinaryFunction = (left: number, right: number, throwRuntime: ThrowLocalRuntime, context: Context) => number;
+function binaryCommand(cmdPrecedence: Precedence, fn: BinaryFunction): Command {
+    return ({ evalStacks: st, context }: EvalContext, pre: Precedence, throwRuntime: ThrowLocalRuntime) => {
+        if (pre > cmdPrecedence) return false;
+        if (st.numeric.length < 2) throw new Error("Binary command expects >=2 elemens in the numeric stack");
+        const right = st.numeric.popNumber();
+        const left = st.numeric.popNumber();
+        st.numeric.push(fn(left, right, throwRuntime, context));
+        st.command.pop();
+        return true;
+    };
+}
+
+
 // Helper functions
-function handleInfixOperator(evalContext: EvalContext, tokenType: TokenType, pre: Precedence, fn: InfixFunc) {
+type InfixFunc = (l: number, r: number, throwMath: ThrowMsg, context: Context) => number;
+function handleInfixOperator(evalContext: EvalContext, pre: Precedence, fn: InfixFunc) {
     const { evalStacks, iter } = evalContext;
     if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found an infix operator instead");
     evalStacks.evalUntil(evalContext, pre);
     evalStacks.command.push({
-        tokenType: tokenType,
+        tokenType: iter.cur()!.type,
         cmd: binaryCommand(
             pre,
-            (l, r, throwRuntime, context) => fn((msg) => throwRuntime(RuntimeMathError, msg), context, l, r)
+            (l, r, throwRuntime, context) => fn(l, r, (msg) => throwRuntime(RuntimeMathError, msg), context)
         ),
+    });
+    evalStacks.numeric.pushPlaceholder();
+}
+
+function handleInfixParenOperator(evalContext: EvalContext, pre: Precedence, fn: InfixFunc) {
+    const { evalStacks, iter } = evalContext;
+    if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found an infix parenthetical operator instead");
+    evalStacks.evalUntil(evalContext, pre);
+
+    evalStacks.command.push({
+        tokenType: iter.cur()!.type,
+        cmd: ({ evalStacks: st, context }, pre, throwRuntime) => {
+            if (pre !== Precedence.comma && pre !== Precedence.closeBracket && pre !== Precedence.lowest) return false;
+
+            if (st.numeric.length < 2) throw new Error("Infix parenthetical command expects >=2 elements in the numeric stack");
+            const r = st.numeric.popNumber();
+            const l = st.numeric.popNumber();
+            st.numeric.push(fn(l, r, (msg) => throwRuntime(RuntimeMathError, msg), context));
+            st.command.pop();
+
+            if (pre === Precedence.closeBracket) return false;
+
+            return true;
+        },
     });
     evalStacks.numeric.pushPlaceholder();
 }
@@ -343,9 +370,87 @@ function meetDegreeToken(evalContext: EvalContext) {
 }
 
 // Valued
-function meetValuedToken({ evalStacks, iter, context }: EvalContext, tokenType: ValuedTokenType) {
-    insertOmittedMul({ evalStacks, iter, context });
-    evalStacks.numeric.push(tokenType.fn(context));
+function handleValuedToken(evalContext: EvalContext, value: number) {
+    const { evalStacks } = evalContext;
+
+    insertOmittedMul(evalContext);
+    evalStacks.numeric.push(value);
+}
+function meetConstantToken(evalContext: EvalContext) {
+    const VALUES = new Map<TokenType, number>([
+        [allTokenTypes.pi, 3.141_592_653_589_8],
+        [allTokenTypes.e, 2.718_281_828_459_04],
+
+        [allTokenTypes.massProton, 1.672_621_777e-27],
+        [allTokenTypes.massNeutron, 1.674_927_351e-27],
+        [allTokenTypes.massElectron, 9.109_382_91e-31],
+        [allTokenTypes.massMuon, 1.883_531_475e-28],
+
+        [allTokenTypes.bohrRadius, 5.291_772_109_2e-11],
+        [allTokenTypes.planckConst, 6.626_069_57e-34],
+        [allTokenTypes.nuclearMagneton, 5.050_783_53e-27],
+        [allTokenTypes.bohrMagneton, 9.274_009_68e-24],
+
+        [allTokenTypes.reducedPlankConst, 1.054_571_726e-34],
+        [allTokenTypes.fineStructureConst, 7.297_352_569_8e-3],
+        [allTokenTypes.classicalElectronRadius, 2.817_940_326_7e-15],
+        [allTokenTypes.comptonWavelength, 2.426_310_238_9e-12],
+
+        [allTokenTypes.protonGyromagnticRatio, 2.675_222_005e-8],
+        [allTokenTypes.protonComptonWavelength, 1.321_409_856_23e-15],
+        [allTokenTypes.neutronComptonWavelength, 1.319_590_906_8e-15],
+        [allTokenTypes.RydbergConst, 1.097_373_156_853_9e7],
+
+        [allTokenTypes.atomicUnitConst, 1.660_538_921e-27],
+        [allTokenTypes.protonMagneticMoment, 1.410_606_743e-26],
+        [allTokenTypes.electronMagneticMoment, -9.284_764_3e-24],
+        [allTokenTypes.neutronMagneticMoment, -9.662_364_7e-27],
+
+        [allTokenTypes.muonMagneticMoment, -9.662_364_7e-27],
+        [allTokenTypes.faradayConst, 96_485.336_5],
+        [allTokenTypes.elementaryCharge, 1.602_176_565e-19],
+        [allTokenTypes.avogadroConst, 6.022_141_29e23],
+
+        [allTokenTypes.boltzmannConst, 1.380_648_8e-23],
+        [allTokenTypes.idealGasMolarVolume, 0.022_710_953],
+        [allTokenTypes.molarGasConst, 8.314_462_1],
+        [allTokenTypes.vacuumLightSpeed, 299_792_458],
+
+        [allTokenTypes.firstRadiationConst, 3.741_771_53e-16],
+        [allTokenTypes.secondRadiationConst, 0.014_387_77],
+        [allTokenTypes.stefanBoltzmannConst, 5.670_373e-8],
+        [allTokenTypes.electricConst, 8.854_187_817e-12],
+
+        [allTokenTypes.magneticConst, 1.256_637_061_4e-6],
+        [allTokenTypes.magneticFluxQuantum, 2.067_833_758e-15],
+        [allTokenTypes.gravitationalAccel, 9.806_65],
+        [allTokenTypes.conductanceQuantum, 7.748_091_734_6e-5],
+
+        [allTokenTypes.characteristicVacuumImpedance, 376.730_313_461],
+        [allTokenTypes.celsiusTemperature, 273.15],
+        [allTokenTypes.gravitationalConst, 6.673_84e-11],
+        [allTokenTypes.atmosphere, 101_325],
+    ]);
+
+    const { iter } = evalContext;
+
+    const value = VALUES.get(iter.cur()!.type);
+    if (value === undefined) throw new Error("Not a constant token type");
+
+    handleValuedToken(evalContext, value);
+}
+function meetRanToken(evalContext: EvalContext) {
+    const value = Math.floor(Math.random() * 1000) / 1000;
+    handleValuedToken(evalContext, value);
+}
+function meetVariableToken(evalContext: EvalContext) {
+    const { iter, context } = evalContext;
+
+    const type = iter.cur()!.type;
+    if (!(type instanceof VariableTokenType)) throw new Error("Not a variable token type");
+    const value = context.variables[type.varName];
+
+    handleValuedToken(evalContext, value);
 }
 
 // Plus, minus and negative
@@ -353,7 +458,7 @@ function meetPlusToken({ evalStacks, iter, context }: EvalContext) {
     if (evalStacks.numeric.isPlaceholder()) {
         // nothing happens: more than 24 + does not cause STACK error
     } else {
-        handleInfixOperator({ evalStacks, iter, context }, allTokenTypes.plus, Precedence.L4, (_, __, l, r) => l + r);
+        handleInfixOperator({ evalStacks, iter, context }, Precedence.L4, (l, r) => l + r);
     }
 }
 function meetPrefixMinus({ evalStacks }: EvalContext) {
@@ -363,7 +468,7 @@ function meetPrefixMinus({ evalStacks }: EvalContext) {
     });
 }
 function meetInfixMinus(evalContext: EvalContext) {
-    handleInfixOperator(evalContext, allTokenTypes.minus, Precedence.L4, (_, __, l, r) => l - r);
+    handleInfixOperator(evalContext, Precedence.L4, (l, r) => l - r);
 }
 function meetMinusToken({ evalStacks, iter, context }: EvalContext) {
     if (evalStacks.numeric.isPlaceholder()) {
@@ -377,20 +482,66 @@ function meetNegToken({ evalStacks, iter, context }: EvalContext) {
     meetPrefixMinus({ evalStacks, iter, context });
 }
 
-// Multiply and divide
-function meetMultiplyToken(evalContext: EvalContext) {
-    handleInfixOperator(evalContext, allTokenTypes.multiply, Precedence.L5, allTokenTypes.multiply.fn);
+// Normal infix functions
+function bool2int(b: boolean) {
+    return b ? 1 : 0;
 }
-function meetDivideToken(evalContext: EvalContext) {
-    handleInfixOperator(evalContext, allTokenTypes.divide, Precedence.L5, allTokenTypes.divide.fn);
+function meetEqToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, Precedence.L2, (l, r) => bool2int(l-r === 0));
+}
+function meetNeqToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, Precedence.L2, (l, r) => bool2int(l-r !== 0));
+}
+function meetGreaterToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, Precedence.L2, (l, r) => bool2int(l-r > 0));
+}
+function meetLessToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, Precedence.L2, (l, r) => bool2int(l-r < 0));
+}
+function meetGeqToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, Precedence.L2, (l, r) => bool2int(l-r >= 0));
+}
+function meetLeqToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, Precedence.L2, (l, r) => bool2int(l-r <= 0));
 }
 
-// Permutation and combination
+function meetMultiplyToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, Precedence.L5, (l, r) => l*r);
+}
+function meetDivideToken(evalContext: EvalContext) {
+    handleInfixOperator(evalContext, Precedence.L5, (l, r, throwMath) => {
+        if (r === 0) throwMath("Division by 0");
+        return l/r;
+    });
+}
+
+function validatePerComArguments(n: number, r: number, throwMath: (msg: string) => void) {
+    if (!Number.isInteger(n) || !Number.isInteger(r)) throwMath("n and r in nPr must be integer");
+    if (!(0 <= r)) throwMath("r cannot be negative in nPr");
+    if (!(r <= n)) throwMath("n must be no less than r in nPr");
+    if (!(n < Math.pow(10, 10))) throwMath("n must be less than 10^10 in nPr");
+}
 function meetPermutationToken(evalContext: EvalContext) {
-    handleInfixOperator(evalContext, allTokenTypes.permutation, Precedence.L6, allTokenTypes.permutation.fn);
+    handleInfixOperator(evalContext, Precedence.L6, (n, r, throwMath) => {
+        validatePerComArguments(n, r, throwMath);
+
+        let ans = 1;
+        for (let k = 0; k < r; ++k) {
+            ans *= n-k;
+        }
+        return ans;
+    });
 }
 function meetCombinationToken(evalContext: EvalContext) {
-    handleInfixOperator(evalContext, allTokenTypes.permutation, Precedence.L6, allTokenTypes.combination.fn);
+    handleInfixOperator(evalContext, Precedence.L6, (n, r, throwMath) => {
+        validatePerComArguments(n, r, throwMath);
+
+        let ans = 1;
+        for (let k = 0; k < r; ++k) {
+            ans = ans * (n-k) / (k+1);
+        }
+        return ans;
+    });
 }
 
 // Fraction
@@ -445,73 +596,204 @@ function meetFractionToken(evalContext: EvalContext) {
 
 // Power
 function meetPowerToken(evalContext: EvalContext) {
-    const { evalStacks, iter } = evalContext;
-    if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found power instead");
-    evalStacks.evalUntil(evalContext, Precedence.L11);
-
-    evalStacks.command.push({
-        tokenType: allTokenTypes.power,
-        cmd: ({ evalStacks: st, context }, pre, throwRuntime) => {
-            if (pre !== Precedence.comma && pre !== Precedence.closeBracket && pre !== Precedence.lowest) return false;
-
-            if (st.numeric.length < 2) throw new Error("Power command expects >=2 elements in the numeric stack");
-            const r = st.numeric.popNumber();
-            const l = st.numeric.popNumber();
-            st.numeric.push(allTokenTypes.power.fn((msg) => throwRuntime(RuntimeMathError, msg), context, l, r));
-            st.command.pop();
-
-            if (pre === Precedence.closeBracket) return false;
-
-            return true;
-        },
+    handleInfixParenOperator(evalContext, Precedence.L11, (l, r) => {
+        // TODO validation
+        return Math.pow(l, r);
     });
-    evalStacks.numeric.pushPlaceholder();
 }
 
 function meetRootToken(evalContext: EvalContext) {
-    const { evalStacks, iter } = evalContext;
-    if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found root instead");
-    evalStacks.evalUntil(evalContext, Precedence.L11);
-
-    evalStacks.command.push({
-        tokenType: allTokenTypes.power,
-        cmd: ({ evalStacks: st, context }, pre, throwRuntime) => {
-            if (pre !== Precedence.comma && pre !== Precedence.closeBracket && pre !== Precedence.lowest) return false;
-
-            if (st.numeric.length < 2) throw new Error("Root command expects >=2 elements in the numeric stack");
-            const r = st.numeric.popNumber();
-            const l = st.numeric.popNumber();
-            st.numeric.push(allTokenTypes.root.fn((msg) => throwRuntime(RuntimeMathError, msg), context, l, r));
-            st.command.pop();
-
-            if (pre === Precedence.closeBracket) return false;
-
-            return true;
-        },
+    handleInfixParenOperator(evalContext, Precedence.L11, (l, r) => {
+        // TODO validation
+        return Math.pow(r, 1/l);
     });
-    evalStacks.numeric.pushPlaceholder();
 }
 
 // Suffix function
-function meetSuffixFuncToken(evalContext: EvalContext, tokenType: SuffixFuncTokenType) {
+type ThrowMsg = (msg: string) => never;
+type SuffixFunc = (x: number, throwMath: ThrowMsg, context: Context) => number;
+const suffixFunctions = new Map<TokenType, SuffixFunc>([
+    [allTokenTypes.reciprocal, (x, throwMath) => {
+        if (x === 0) throwMath("Division by 0");
+        return 1/x;
+    }],
+
+    [allTokenTypes.fact, (x, throwMath) => {
+        if (!Number.isInteger(x)) throwMath("Cannot take the factorial of a non-integer");
+        if (x < 0) throwMath("Cannot take the factorial of a negative value");
+        if (x > 69) throwMath("Cannot take the factorial of an integer larger than 69 (too large)");
+
+        let ans = 1;
+        for (let k = 2; k <= x; ++k) {
+            ans *= k;
+        }
+        return ans;
+    }],
+
+    [allTokenTypes.cube, (x) => Math.pow(x,3)],
+    [allTokenTypes.square, (x) => Math.pow(x,2)],
+
+    [allTokenTypes.percentage, (x) => x/100],
+
+    [allTokenTypes.asD, (x, _, context) => x * angleUnitToRad(AngleUnit.Deg) / angleUnitToRad(context.setupSettings.angle)],
+    [allTokenTypes.asR, (x, _, context) => x * angleUnitToRad(AngleUnit.Rad) / angleUnitToRad(context.setupSettings.angle)],
+    [allTokenTypes.asG, (x, _, context) => x * angleUnitToRad(AngleUnit.Gra) / angleUnitToRad(context.setupSettings.angle)],
+]);
+
+function meetSuffixFuncToken(evalContext: EvalContext) {
     const { evalStacks, iter, context } = evalContext;
     if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found suffix function instead");
-    const fn = tokenType.fn;
+    const fn = suffixFunctions.get(iter.cur()!.type);
+    if (fn === undefined) throw new Error("Not a suffix function token type");
     evalStacks.evalUntil(evalContext, Precedence.L11);
 
     if (evalStacks.numeric.length === 0) throw new Error("Suffix function expects >=1 elements in the numeric stack");
     const x = evalStacks.numeric.popNumber();
-    evalStacks.numeric.push(fn((msg) => throwRuntime(RuntimeMathError, iter, msg), context, x));
+    evalStacks.numeric.push(fn(x, (msg) => throwRuntime(RuntimeMathError, iter, msg), context));
 }
 
+type ArrayOfLength<T, N extends number, Arr extends T[] = []> =
+    Arr["length"] extends N
+    ? Arr | (N extends Arr["length"]
+        ? never
+        : ArrayOfLength<T, Exclude<N, Arr["length"]>>
+    ) : ArrayOfLength<T, N, [T, ...Arr]>
+
+type ParenFuncArgNum = number | number[];
+type ParenFunc<ArgNum extends ParenFuncArgNum> =
+    ArgNum extends number[]
+    ? ParenFunc<ArgNum[number]>
+    : (ArgNum extends number
+        ? (args: ArrayOfLength<number, ArgNum>, throwMath: ThrowMsg, context: Context) => number
+        : never);
+
+type ParenFuncEntry<ArgNum extends ParenFuncArgNum> = [ArgNum, ParenFunc<ArgNum>];
+
+// @ts-expect-error
+// I give up
+const parenFunctions = new Map<TokenType, ParenFuncEntry<ParenFuncArgNum>>([
+    [allTokenTypes.cbrt, <ParenFuncEntry<1>>[1, ([x]) => Math.cbrt(x)]],
+    [allTokenTypes.sqrt, <ParenFuncEntry<1>>[1, ([x], throwMath) => {
+        if (x < 0) throwMath("Cannot take the square root of negative value");
+        return Math.sqrt(x);
+    }]],
+
+    [allTokenTypes.log, <ParenFuncEntry<[1,2]>>[[1,2], ([arg2, arg3]: [number, number?], throwMath: ThrowMsg) => {
+        if (arg3 === undefined) {
+            if (arg2 <= 0) throwMath("Cannot take the log of a non-positive value");
+            return Math.log10(arg2);
+        } else {
+            if (arg2 == 1) throwMath("Base of log cannot be 1");
+            if (arg2 <= 0) throwMath("Base of log cannot be non-positive");
+            if (arg3 <= 0) throwMath("Cannot take the log of a non-positive value");
+            return Math.log(arg3)/Math.log(arg2);
+        }
+    }]],
+    [allTokenTypes.tenExp, <ParenFuncEntry<1>>[1, ([x]) => Math.pow(10, x)]],
+    [allTokenTypes.ln, <ParenFuncEntry<1>>[1, ([x], throwMath) => {
+        if (x <= 0) throwMath("Cannot take the ln of a non-positive value");
+        return Math.log(x)
+    }]],
+    [allTokenTypes.eExp, <ParenFuncEntry<1>>[1, ([x]) => Math.exp(x)]],
+
+    [allTokenTypes.sin, <ParenFuncEntry<1>>[1, ([x], throwMath, context) => {
+        const range: number = {
+            [AngleUnit.Deg]: 8_999_999_999.999_92,
+            [AngleUnit.Rad]: 157_079_632.679_488,
+            [AngleUnit.Gra]: 9_999_999_999.999_90,
+        }[context.setupSettings.angle];
+        if (Math.abs(x) > range) throwMath(`Cannot take the sin of a value with an absolute value greater than ${range} in this angle unit`);
+        return Math.sin(x * angleUnitToRad(context.setupSettings.angle));
+    }]],
+    [allTokenTypes.asin, <ParenFuncEntry<1>>[1, ([x], throwMath, context) => {
+        if (Math.abs(x) > 1) throwMath("Cannot take the arcsin of a value with an absolute value greater than 1");
+        return Math.asin(x) / angleUnitToRad(context.setupSettings.angle);
+    }]],
+    [allTokenTypes.sinh, <ParenFuncEntry<1>>[1, ([x]) => Math.sinh(x)]],
+    [allTokenTypes.asinh, <ParenFuncEntry<1>>[1, ([x]) => Math.asinh(x)]],
+
+    [allTokenTypes.cos, <ParenFuncEntry<1>>[1, ([x], throwMath, context) => {
+        const range: number = {
+            [AngleUnit.Deg]: 8_999_999_999.999_92,
+            [AngleUnit.Rad]: 157_079_632.679_488,
+            [AngleUnit.Gra]: 9_999_999_999.999_90,
+        }[context.setupSettings.angle];
+        if (Math.abs(x) > range) throwMath(`Cannot take the cos of a value with an absolute value greater than ${range} in this angle unit`);
+        return Math.cos(x * angleUnitToRad(context.setupSettings.angle));
+    }]],
+    [allTokenTypes.acos, <ParenFuncEntry<1>>[1, ([x], throwMath, context) => {
+        if (Math.abs(x) > 1) throwMath("Cannot take the arccos of a value with an absolute value greater than 1");
+        return Math.acos(x) / angleUnitToRad(context.setupSettings.angle);
+    }]],
+    [allTokenTypes.cosh, <ParenFuncEntry<1>>[1, ([x]) => Math.cosh(x)]],
+    [allTokenTypes.acosh, <ParenFuncEntry<1>>[1, ([x]) => Math.asinh(x)]],
+
+    [allTokenTypes.tan, <ParenFuncEntry<1>>[1, ([x], throwMath, context) => {
+        const range: number = {
+            [AngleUnit.Deg]: 8_999_999_999.999_92,
+            [AngleUnit.Rad]: 157_079_632.679_488,
+            [AngleUnit.Gra]: 9_999_999_999.999_90,
+        }[context.setupSettings.angle];
+        if (Math.abs(x) > range) throwMath(`Cannot take the tan of a value with an absolute value greater than ${range} in this angle unit`);
+
+        const undefinedAt: number = {
+            [AngleUnit.Deg]: 90,
+            [AngleUnit.Rad]: 1.570_796_326_794_90,
+            [AngleUnit.Gra]: 100,
+        }[context.setupSettings.angle];
+        const quotient = Math.round(x / undefinedAt);
+        if (quotient % 2 === 1) {
+            const closest = quotient * undefinedAt;
+            if (x - closest === 0) throwMath(`Tan of this value is undefined`);
+        }
+
+        return Math.tan(x * angleUnitToRad(context.setupSettings.angle));
+    }]],
+    [allTokenTypes.atan, <ParenFuncEntry<1>>[1, ([x], _, context) => {
+        return Math.atan(x) / angleUnitToRad(context.setupSettings.angle);
+    }]],
+    [allTokenTypes.tanh, <ParenFuncEntry<1>>[1, ([x]) => Math.tanh(x)]],
+    [allTokenTypes.atanh, <ParenFuncEntry<1>>[1, ([x]) => Math.asinh(x)]],
+
+    [allTokenTypes.polar, <ParenFuncEntry<2>>[2, ([x, y], throwMath, context) => {
+        if (x === 0 && y === 0) throwMath("Cannot convert (0,0) to polar form");
+        context.variables.Y = Math.atan2(y, x) / angleUnitToRad(context.setupSettings.angle);
+        return context.variables.X = Math.sqrt(x*x + y*y);
+    }]],
+    [allTokenTypes.rect, <ParenFuncEntry<2>>[2, ([r, theta], _, context) => {
+        const angleInRad = theta * angleUnitToRad(context.setupSettings.angle);
+        context.variables.Y = r * Math.sin(angleInRad);
+        return context.variables.X = r * Math.cos(angleInRad);
+    }]],
+
+    [allTokenTypes.rnd, <ParenFuncEntry<1>>[1, ([x], _, context) => {
+        const digits = context.setupSettings.displayDigits.digits;
+        switch (context.setupSettings.displayDigits.kind) {
+            case DisplayDigitsKind.Fix:
+                const pow10 = Math.pow(10, digits);
+                return Math.round(x * pow10) / pow10;
+            case DisplayDigitsKind.Sci:
+                return Number(x.toExponential(digits - 1));
+            case DisplayDigitsKind.Norm:
+                return Number(x.toExponential(9)); // round to 10 significant figures
+        }
+    }]],
+    [allTokenTypes.abs, <ParenFuncEntry<1>>[1, ([x]) => Math.abs(x)]],
+
+    [allTokenTypes.openBracket, <ParenFuncEntry<1>>[1, ([x]) => x]],
+]);
+
 // Parerenthical function
-function meetParenFuncToken<ArgNum extends ParenFuncArgNum>(evalContext: EvalContext, tokenType: ParenFuncTokenType<ArgNum>) {
+function meetParenFuncToken(evalContext: EvalContext) {
     const { evalStacks, iter, context } = evalContext;
     insertOmittedMul({ evalStacks, iter, context });
     const oriNSLen = evalStacks.numeric.length;
-    const argNum = tokenType.argNum;
+    
+    const tokenType = iter.cur()!.type;
+    if (!parenFunctions.has(tokenType)) throw new Error("Not a parenthetical function");
+    const [argNum, fn] = parenFunctions.get(tokenType)!;
     const maxArgNum = (argNum instanceof Array) ? Math.max(...argNum) : argNum;
-    const fn = tokenType.fn;
+
     evalStacks.command.push({
         tokenType: tokenType,
         cmd: ({ evalStacks: st }, pre, throwRuntime) => {
@@ -530,9 +812,8 @@ function meetParenFuncToken<ArgNum extends ParenFuncArgNum>(evalContext: EvalCon
             }
             args.reverse();
 
-            // @ts-expect-error
             // Idk how to make this work lol, but args should be of type ArrayOfLength<number, ArgNum>
-            st.numeric.push(fn((msg) => throwRuntime(RuntimeMathError, msg), context, ...args));
+            st.numeric.push(fn(args, (msg) => throwRuntime(RuntimeMathError, msg), context));
             st.command.pop();
 
             if (pre === Precedence.closeBracket) return false;
@@ -549,17 +830,48 @@ function meetCommaToken(evalContext: EvalContext) {
     if (evalStacks.command.length === 0)
         throwRuntime(RuntimeSyntaxError, iter, "Found comma at top level");
     const lastType = evalStacks.command.last.tokenType;
-    if (!(lastType instanceof ParenFuncTokenType || lastType instanceof InfixParenFuncTokenType))
+    if (lastType === null || !Object.values(parenTokenTypes).includes(lastType))
         throwRuntime(RuntimeSyntaxError, iter, "Found comma at top level");
     evalStacks.numeric.pushPlaceholder();
 }
 function meetCloseBracketToken(evalContext: EvalContext) {
     const { evalStacks, iter } = evalContext;
     if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found close bracket instead");
-    if (!evalStacks.command.raw.some((cmdEl) => cmdEl.tokenType instanceof ParenFuncTokenType || cmdEl.tokenType instanceof InfixFuncTokenType))
+    if (!evalStacks.command.raw.some((cmdEl) => cmdEl.tokenType !== null && Object.values(parenTokenTypes).includes(cmdEl.tokenType)))
         throwRuntime(RuntimeSyntaxError, iter, "Found close bracket at top level");
     evalStacks.evalUntil(evalContext, Precedence.closeBracket);
 }
+
+type MeetTokenFn = (evalContext: EvalContext) => void;
+const meetTokenMap = new Map<TokenType, MeetTokenFn>([
+    ...Object.values(digitTokenTypes).map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetLiteralToken]),
+    [allTokenTypes.dot, meetLiteralToken],
+    [allTokenTypes.exp, meetLiteralToken],
+    [allTokenTypes.deg, meetDegreeToken],
+    ...Object.values(constantTokenTypes).map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetConstantToken]),
+    [allTokenTypes.ran, meetRanToken],
+    ...Object.values(variableTokenTypes).map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetVariableToken]),
+    [allTokenTypes.plus, meetPlusToken],
+    [allTokenTypes.minus, meetMinusToken],
+    [allTokenTypes.neg, meetNegToken],
+    [allTokenTypes.eq, meetEqToken],
+    [allTokenTypes.neq, meetNeqToken],
+    [allTokenTypes.greater, meetGreaterToken],
+    [allTokenTypes.less, meetLessToken],
+    [allTokenTypes.geq, meetGeqToken],
+    [allTokenTypes.leq, meetLeqToken],
+    [allTokenTypes.multiply, meetMultiplyToken],
+    [allTokenTypes.divide, meetDivideToken],
+    [allTokenTypes.permutation, meetPermutationToken],
+    [allTokenTypes.combination, meetCombinationToken],
+    [allTokenTypes.frac, meetFractionToken],
+    [allTokenTypes.power, meetPowerToken],
+    [allTokenTypes.root, meetRootToken],
+    [allTokenTypes.comma, meetCommaToken],
+    [allTokenTypes.closeBracket, meetCloseBracketToken],
+    ...Object.values(suffixFuncTokenTypes).map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetSuffixFuncToken]),
+    ...Object.values(parenFuncTokenTypes).map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetParenFuncToken]),
+]);
 
 // Main function to evaluate expression
 function evaluateExpression(iter: TokenIterator, context: Context = new Context(), isIsolated: boolean = true) {
@@ -573,61 +885,13 @@ function evaluateExpression(iter: TokenIterator, context: Context = new Context(
         loop:
         for (; iter.isInBound(); iter.next()) {
             const cur = iter.cur()!;
-            switch (cur.type) {
-                case allTokenTypes.deg:
-                    meetDegreeToken(evalContext);
-                    break;
-                case allTokenTypes.plus:
-                    meetPlusToken(evalContext);
-                    break;
-                case allTokenTypes.minus:
-                    meetMinusToken(evalContext);
-                    break;
-                case allTokenTypes.neg:
-                    meetNegToken(evalContext);
-                    break;
-                case allTokenTypes.multiply:
-                    meetMultiplyToken(evalContext);
-                    break;
-                case allTokenTypes.divide:
-                    meetDivideToken(evalContext);
-                    break;
-                case allTokenTypes.permutation:
-                    meetPermutationToken(evalContext);
-                    break;
-                case allTokenTypes.combination:
-                    meetCombinationToken(evalContext);
-                    break;
-                case allTokenTypes.frac:
-                    meetFractionToken(evalContext);
-                    break;
-                case allTokenTypes.power:
-                    meetPowerToken(evalContext);
-                    break;
-                case allTokenTypes.root:
-                    meetRootToken(evalContext);
-                    break;
-                case allTokenTypes.comma:
-                    meetCommaToken(evalContext);
-                    break;
-                case allTokenTypes.closeBracket:
-                    meetCloseBracketToken(evalContext);
-                    break;
-
-                default:
-                    if (Object.values(literalTokenTypes).includes(cur.type)) {
-                        meetLiteralToken(evalContext);
-                    } else if (cur.type instanceof ValuedTokenType) {
-                        meetValuedToken(evalContext, cur.type);
-                    } else if (cur.type instanceof SuffixFuncTokenType) {
-                        meetSuffixFuncToken(evalContext, cur.type);
-                    } else if (cur.type instanceof ParenFuncTokenType) {
-                        meetParenFuncToken<any>(evalContext, cur.type);
-                    } else {
-                        if (isIsolated) throwRuntime(RuntimeSyntaxError, iter, "Unsupported token");
-                        else break loop;
-                    }
+            const meetFn = meetTokenMap.get(cur.type);
+            if (meetFn === undefined) {
+                if (isIsolated) throwRuntime(RuntimeSyntaxError, iter, "Unsupported token");
+                else break loop;
             }
+
+            meetFn(evalContext);
 
             // console.log(evalStacks.numeric, evalStacks.command);
         }
