@@ -30,14 +30,14 @@ function expectNext(iter: TokenIterator, arg: TokenType | TokenType[] | Record<s
     throwRuntime(ErrorClass, iter, failedMessage);
 }
 function expectEnd(iter: TokenIterator, failedMessage: string, ErrorClass: typeof RuntimeError = RuntimeSyntaxError) {
-    if (!iter.isInBound() || iter.cur()!.type === programTokenTypes.separator || iter.cur()!.type === programTokenTypes.disp) {
+    if (!iter.isInBound() || iter.cur()!.type === allTokenTypes.separator || iter.cur()!.type === allTokenTypes.disp) {
         return;
     }
     throwRuntime(ErrorClass, iter, failedMessage);
 }
 
 function acceptAssignment({ iter }: ExecContext): VariableName {
-    expectNext(iter, programTokenTypes.assign, "Expects assignment");
+    expectNext(iter, allTokenTypes.assign, "Expects assignment");
 
     if (!iter.isInBound()) {
         throwRuntime(RuntimeSyntaxError, iter, "Assignment expects variable");
@@ -46,7 +46,7 @@ function acceptAssignment({ iter }: ExecContext): VariableName {
     if (!(varToken.type instanceof VariableTokenType)) {
         throwRuntime(RuntimeSyntaxError, iter, "Assignment expects variable");
     }
-    if (varToken.type === variableTokenTypes.ans) {
+    if (varToken.type === allTokenTypes.ans) {
         throwRuntime(RuntimeSyntaxError, iter, "Cannot perform assignment to Ans");
     }
     iter.next();
@@ -71,10 +71,10 @@ async function meetExpressionToken(execContext: ExecContext): Promise<void> {
     if (!iter.isInBound()) return;
 
     const token = iter.cur()!;
-    if (token.type === programTokenTypes.assign) {
+    if (token.type === allTokenTypes.assign) {
         const varName = acceptAssignment(execContext);
         context.variables[varName] = value;
-    } else if (token.type === programTokenTypes.fatArrow) {
+    } else if (token.type === allTokenTypes.fatArrow) {
         await meetFatArrowToken(execContext);
     } else return;
 }
@@ -88,26 +88,26 @@ async function meetFatArrowToken(execContext: ExecContext): Promise<void> {
     const token = iter.cur()!;
     if (context.variables.Ans === 0) {
         const ALLOWED_TOKEN_TYPES: TokenType[] = [
-            ...Object.values(expressionTokenTypes),
-            ...Object.values(setupTokenTypes),
-            programTokenTypes.prompt,
-            programTokenTypes.goto,
-            programTokenTypes.lbl,
-            programTokenTypes.break,
-            programTokenTypes.to, // lmao
-            programTokenTypes.step, // also this lol
+            ...expressionTokenTypes,
+            ...setupTokenTypes,
+            allTokenTypes.prompt,
+            allTokenTypes.goto,
+            allTokenTypes.lbl,
+            allTokenTypes.break,
+            allTokenTypes.to, // lmao
+            allTokenTypes.step, // also this lol
         ];
-        if (!Object.values(ALLOWED_TOKEN_TYPES).includes(token.type)) {
+        if (!ALLOWED_TOKEN_TYPES.includes(token.type)) {
             throwRuntime(RuntimeSyntaxError, iter, "Unexpected token after fat arrow (a false result only accepts expression, setup, prompt, goto, lbl, break, to, step)");
         }
 
-        while (iter.isInBound() && iter.cur()!.type !== programTokenTypes.separator && iter.cur()!.type !== programTokenTypes.disp) {
+        while (iter.isInBound() && iter.cur()!.type !== allTokenTypes.separator && iter.cur()!.type !== allTokenTypes.disp) {
             iter.next();
         }
 
         if (!iter.isInBound()) return;
-        if (iter.cur()!.type === programTokenTypes.separator) return;
-        if (iter.cur()!.type === programTokenTypes.disp) {
+        if (iter.cur()!.type === allTokenTypes.separator) return;
+        if (iter.cur()!.type === allTokenTypes.disp) {
             iter.next();
             tokenDisplayFrom.i = iter.i;
             if (iter.isInBound()) await interpretCommand(execContext);
@@ -117,17 +117,17 @@ async function meetFatArrowToken(execContext: ExecContext): Promise<void> {
 
     } else {
 
-        if (Object.values(expressionTokenTypes).includes(token.type)) {
+        if (expressionTokenTypes.includes(token.type)) {
             await meetExpressionToken(execContext);
-        } else if (Object.values(setupTokenTypes).includes(token.type)) {
+        } else if (setupTokenTypes.includes(token.type)) {
             await meetSetupToken(execContext);
-        } else if (token.type === programTokenTypes.prompt) {
+        } else if (token.type === allTokenTypes.prompt) {
             await meetPromptToken(execContext);
-        } else if (token.type === programTokenTypes.goto) {
+        } else if (token.type === allTokenTypes.goto) {
             await meetGotoToken(execContext);
-        } else if (token.type === programTokenTypes.lbl) {
+        } else if (token.type === allTokenTypes.lbl) {
             await meetLblToken(execContext);
-        } else if (token.type === programTokenTypes.break) {
+        } else if (token.type === allTokenTypes.break) {
             await meetBreakToken(execContext);
         } else {
             throwRuntime(RuntimeSyntaxError, iter, "Unexpected token after fat arrow (a true result only accepts expression, setup, prompt, goto, lbl, break)");
@@ -147,11 +147,11 @@ async function meetGotoToken(execContext: ExecContext): Promise<void> {
     iter.next();
     const labelTokenType = expectNext(iter, digitTokenTypes, "Expects 0-9 after Goto", RuntimeArgumentError);
     expectEnd(iter, "Goto expects ending after 0-9", RuntimeArgumentError);
-    if (iter.isInBound() && iter.cur()!.type === programTokenTypes.disp) {
+    if (iter.isInBound() && iter.cur()!.type === allTokenTypes.disp) {
         await io.display(context, tokens.slice(tokenDisplayFrom.i, iter.i), execContext.value, true);
     }
 
-    const jumpI = tokens.findIndex((token, i) => i < tokens.length-1 && token.type === programTokenTypes.lbl && tokens[i+1]!.type === labelTokenType);
+    const jumpI = tokens.findIndex((token, i) => i < tokens.length-1 && token.type === allTokenTypes.lbl && tokens[i+1]!.type === labelTokenType);
     if (jumpI === -1) {
         iter.prev();
         throwRuntime(RuntimeGotoError, iter, "Label not found");
@@ -171,15 +171,15 @@ async function meetBreakToken(_: ExecContext): Promise<void> {
 
 async function interpretCommand(execContext: ExecContext): Promise<void> {
     const { iter } = execContext;
-    if (iter.cur()!.type === programTokenTypes.prompt) {
+    if (iter.cur()!.type === allTokenTypes.prompt) {
         await meetPromptToken(execContext);
-    } else if (Object.values(expressionTokenTypes).includes(iter.cur()!.type)) {
+    } else if (expressionTokenTypes.includes(iter.cur()!.type)) {
         await meetExpressionToken(execContext);
-    } else if (iter.cur()!.type === programTokenTypes.fatArrow) {
+    } else if (iter.cur()!.type === allTokenTypes.fatArrow) {
         throwRuntime(RuntimeSyntaxError, iter, "Fat arrow can only be used after expression");
-    } else if (iter.cur()!.type === programTokenTypes.lbl) {
+    } else if (iter.cur()!.type === allTokenTypes.lbl) {
         await meetLblToken(execContext);
-    } else if (iter.cur()!.type === programTokenTypes.goto) {
+    } else if (iter.cur()!.type === allTokenTypes.goto) {
         await meetGotoToken(execContext);
     } else {
         throwRuntime(RuntimeStackError, iter, "Unexpected token");
@@ -210,12 +210,12 @@ async function interpret(tokens: Token[], context: Context, io: InterpreterIO) {
             const value = execContext.value;
             if (!iter.isInBound()) {
                 await io.display(context, tokensToBeDisplayed, value, false);
-            } else if (iter.cur()!.type === programTokenTypes.separator) {
+            } else if (iter.cur()!.type === allTokenTypes.separator) {
                 iter.next();
                 if (!iter.isInBound()) {
                     await io.display(context, tokensToBeDisplayed, value, false);
                 }
-            } else if (iter.cur()!.type === programTokenTypes.disp) {
+            } else if (iter.cur()!.type === allTokenTypes.disp) {
                 await io.display(context, tokensToBeDisplayed, value, true);
                 iter.next();
                 if (!iter.isInBound()) {

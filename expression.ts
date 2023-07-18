@@ -176,7 +176,7 @@ function acceptLiteral(iter: TokenIterator): number {
 
     // ((xxxxx)(.xxxxxx))(E(-)xx)
 
-    if (iter.cur()!.type === literalTokenTypes.exp) {
+    if (iter.cur()!.type === allTokenTypes.exp) {
         significand = 1;
     }
 
@@ -184,14 +184,14 @@ function acceptLiteral(iter: TokenIterator): number {
         significand = significand * 10 + curDigitValue()!;
     }
     // Decimal point
-    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.dot) {
+    if (iter.isInBound() && iter.cur()!.type === allTokenTypes.dot) {
         iter.next();
         for (let j = 1; iter.isInBound() && isCurDigit(); iter.next(), ++j) {
             significand += curDigitValue() * Math.pow(10, -j);
         }
     }
     // Exponent
-    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.exp) {
+    if (iter.isInBound() && iter.cur()!.type === allTokenTypes.exp) {
         iter.next();
 
         let sign = +1;
@@ -215,9 +215,9 @@ function acceptLiteral(iter: TokenIterator): number {
         exp *= sign;
     }
 
-    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.dot)
+    if (iter.isInBound() && iter.cur()!.type === allTokenTypes.dot)
         throwRuntime(RuntimeSyntaxError, iter, "Dot is not allowed in exponent or after another dot");
-    if (iter.isInBound() && iter.cur()!.type === literalTokenTypes.exp)
+    if (iter.isInBound() && iter.cur()!.type === allTokenTypes.exp)
         throwRuntime(RuntimeSyntaxError, iter, "Literal cannot have more than one Exp");
 
     iter.prev();
@@ -327,7 +327,7 @@ function meetDegreeToken(evalContext: EvalContext) {
             return false;
         }
         if (iter.cur()!.type === allTokenTypes.deg) throwRuntime(RuntimeSyntaxError, iter, "Not allowed two consecutive degree");
-        if (!Object.values(literalTokenTypes).includes(iter.cur()!.type)) {
+        if (!literalTokenTypes.includes(iter.cur()!.type)) {
             iter.prev();
             evalStacks.evalUntil(evalContext, Precedence.L11);
             return false;
@@ -362,7 +362,7 @@ function meetDegreeToken(evalContext: EvalContext) {
     if (!acceptOnePart()) return;
 
     iter.next();
-    if (iter.isInBound() && Object.values(literalTokenTypes).includes(iter.cur()!.type))
+    if (iter.isInBound() && literalTokenTypes.includes(iter.cur()!.type))
         throwRuntime(RuntimeSyntaxError, iter, "Number literal cannot exist after a maximum of 3 degree symbols");
     if (iter.isInBound() && iter.cur()!.type === allTokenTypes.deg) throwRuntime(RuntimeSyntaxError, iter, "Not allowed two consecutive degree");
     iter.prev();
@@ -830,27 +830,27 @@ function meetCommaToken(evalContext: EvalContext) {
     if (evalStacks.command.length === 0)
         throwRuntime(RuntimeSyntaxError, iter, "Found comma at top level");
     const lastType = evalStacks.command.last.tokenType;
-    if (lastType === null || !Object.values(parenTokenTypes).includes(lastType))
+    if (lastType === null || !parenTokenTypes.includes(lastType))
         throwRuntime(RuntimeSyntaxError, iter, "Found comma at top level");
     evalStacks.numeric.pushPlaceholder();
 }
 function meetCloseBracketToken(evalContext: EvalContext) {
     const { evalStacks, iter } = evalContext;
     if (evalStacks.numeric.isPlaceholder()) throwRuntime(RuntimeSyntaxError, iter, "Expect number but found close bracket instead");
-    if (!evalStacks.command.raw.some((cmdEl) => cmdEl.tokenType !== null && Object.values(parenTokenTypes).includes(cmdEl.tokenType)))
+    if (!evalStacks.command.raw.some((cmdEl) => cmdEl.tokenType !== null && parenTokenTypes.includes(cmdEl.tokenType)))
         throwRuntime(RuntimeSyntaxError, iter, "Found close bracket at top level");
     evalStacks.evalUntil(evalContext, Precedence.closeBracket);
 }
 
 type MeetTokenFn = (evalContext: EvalContext) => void;
 const meetTokenMap = new Map<TokenType, MeetTokenFn>([
-    ...Object.values(digitTokenTypes).map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetLiteralToken]),
+    ...digitTokenTypes.map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetLiteralToken]),
     [allTokenTypes.dot, meetLiteralToken],
     [allTokenTypes.exp, meetLiteralToken],
     [allTokenTypes.deg, meetDegreeToken],
-    ...Object.values(constantTokenTypes).map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetConstantToken]),
+    ...constantTokenTypes.map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetConstantToken]),
     [allTokenTypes.ran, meetRanToken],
-    ...Object.values(variableTokenTypes).map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetVariableToken]),
+    ...variableTokenTypes.map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetVariableToken]),
     [allTokenTypes.plus, meetPlusToken],
     [allTokenTypes.minus, meetMinusToken],
     [allTokenTypes.neg, meetNegToken],
@@ -869,8 +869,8 @@ const meetTokenMap = new Map<TokenType, MeetTokenFn>([
     [allTokenTypes.root, meetRootToken],
     [allTokenTypes.comma, meetCommaToken],
     [allTokenTypes.closeBracket, meetCloseBracketToken],
-    ...Object.values(suffixFuncTokenTypes).map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetSuffixFuncToken]),
-    ...Object.values(parenFuncTokenTypes).map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetParenFuncToken]),
+    ...suffixFuncTokenTypes.map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetSuffixFuncToken]),
+    ...parenFuncTokenTypes.map<[TokenType, MeetTokenFn]>((tokenType) => [tokenType, meetParenFuncToken]),
 ]);
 
 // Main function to evaluate expression

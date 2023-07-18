@@ -19,7 +19,7 @@ class VariableTokenType extends TokenType {
     }
 }
 
-const digitTokenTypes = {
+const allTokenTypes = {
     num0: new DigitTokenType(0),
     num1: new DigitTokenType(1),
     num2: new DigitTokenType(2),
@@ -30,15 +30,10 @@ const digitTokenTypes = {
     num7: new DigitTokenType(7),
     num8: new DigitTokenType(8),
     num9: new DigitTokenType(9),
-};
-const literalTokenTypes = {
-    ...digitTokenTypes,
 
     exp: new TokenType("E"),
     dot: new TokenType("."),
-};
 
-const variableTokenTypes = {
     varA: new VariableTokenType("A"),
     varB: new VariableTokenType("B"),
     varC: new VariableTokenType("C"),
@@ -47,9 +42,7 @@ const variableTokenTypes = {
     varY: new VariableTokenType("Y"),
     varM: new VariableTokenType("M"),
     ans: new VariableTokenType("Ans"),
-};
 
-const constantTokenTypes = {
     pi: new TokenType("pi", "π"),
     e: new TokenType("e"),
 
@@ -102,9 +95,7 @@ const constantTokenTypes = {
     celsiusTemperature: new TokenType("t"),
     gravitationalConst: new TokenType("G"),
     atmosphere: new TokenType("atm"),
-};
 
-const suffixFuncTokenTypes = {
     reciprocal: new TokenType("^-1", "⁻¹"),
     fact: new TokenType("!"),
 
@@ -117,33 +108,23 @@ const suffixFuncTokenTypes = {
     asD: new TokenType("asD", "°"),
     asR: new TokenType("asR", "ʳ"),
     asG: new TokenType("asG", "ᵍ"),
-};
 
-const relationTokenTypes = {
     eq: new TokenType("="),
     neq: new TokenType("<>", "≠"),
     greater: new TokenType(">"),
     less: new TokenType("<"),
     geq: new TokenType(">=", "≥"),
     leq: new TokenType("<=", "≤"),
-};
-
-const infixFuncTokenTypes = {
-    ...relationTokenTypes,
 
     multiply: new TokenType("*"),
     divide: new TokenType("div", "÷"),
 
     permutation: new TokenType("Per", "𝐏"),
     combination: new TokenType("Com", "𝐂"),
-};
 
-const infixParenTokenTypes = {
     power: new TokenType("^("),
     root: new TokenType("rt(", "x√("),
-};
 
-const parenFuncTokenTypes = {
     cbrt: new TokenType("cbrt(", "³√("),
     sqrt: new TokenType("sqrt(", "√("),
     log: new TokenType("log("),
@@ -167,21 +148,6 @@ const parenFuncTokenTypes = {
     rnd: new TokenType("Rnd("),
     abs: new TokenType("Abs("),
     openBracket: new TokenType("("),
-};
-
-const parenTokenTypes = {
-    ...parenFuncTokenTypes,
-    ...infixParenTokenTypes,
-};
-
-const expressionTokenTypes = {
-    ...literalTokenTypes,
-    ...variableTokenTypes,
-    ...constantTokenTypes,
-    ...suffixFuncTokenTypes,
-    ...infixFuncTokenTypes,
-    ...parenFuncTokenTypes,
-    ...infixParenTokenTypes,
 
     ran: new TokenType("Ran#"),
 
@@ -202,9 +168,7 @@ const expressionTokenTypes = {
     minus: new TokenType("-"),
 
     clrMemory: new TokenType("ClrMemory"),
-};
 
-const setupTokenTypes = {
     degMode: new TokenType("Deg"),
     radMode: new TokenType("Rad"),
     graMode: new TokenType("Gra"),
@@ -213,11 +177,6 @@ const setupTokenTypes = {
     normMode: new TokenType("Norm", "Norm "),
     freqOn: new TokenType("FreqOn"),
     freqOff: new TokenType("FreqOff"),
-};
-
-const programTokenTypes = {
-
-    ...setupTokenTypes,
 
     prompt: new TokenType("?"),
     assign: new TokenType("->", "→"),
@@ -239,7 +198,221 @@ const programTokenTypes = {
     then: new TokenType("Then", "Then "),
 };
 
-const allTokenTypes = {
-    ...expressionTokenTypes,
-    ...programTokenTypes,
-};
+const digitTokenTypes = [
+    allTokenTypes.num0,
+    allTokenTypes.num1,
+    allTokenTypes.num2,
+    allTokenTypes.num3,
+    allTokenTypes.num4,
+    allTokenTypes.num5,
+    allTokenTypes.num6,
+    allTokenTypes.num7,
+    allTokenTypes.num8,
+    allTokenTypes.num9,
+];
+const literalTokenTypes = [
+    ...digitTokenTypes,
+
+    allTokenTypes.exp,
+    allTokenTypes.dot,
+];
+
+const variableTokenTypes = [
+    allTokenTypes.varA,
+    allTokenTypes.varB,
+    allTokenTypes.varC,
+    allTokenTypes.varD,
+    allTokenTypes.varX,
+    allTokenTypes.varY,
+    allTokenTypes.varM,
+    allTokenTypes.ans,
+];
+
+const constantTokenTypes = [
+    allTokenTypes.pi,
+    allTokenTypes.e,
+
+    allTokenTypes.massProton,
+    allTokenTypes.massNeutron,
+    allTokenTypes.massElectron,
+    allTokenTypes.massMuon,
+
+    allTokenTypes.bohrRadius,
+    allTokenTypes.planckConst,
+    allTokenTypes.nuclearMagneton,
+    allTokenTypes.bohrMagneton,
+
+    allTokenTypes.reducedPlankConst,
+    allTokenTypes.fineStructureConst,
+    allTokenTypes.classicalElectronRadius,
+    allTokenTypes.comptonWavelength,
+
+    allTokenTypes.protonGyromagnticRatio,
+    allTokenTypes.protonComptonWavelength,
+    allTokenTypes.neutronComptonWavelength,
+    allTokenTypes.RydbergConst,
+
+    allTokenTypes.atomicUnitConst,
+    allTokenTypes.protonMagneticMoment,
+    allTokenTypes.electronMagneticMoment,
+    allTokenTypes.neutronMagneticMoment,
+
+    allTokenTypes.muonMagneticMoment,
+    allTokenTypes.faradayConst,
+    allTokenTypes.elementaryCharge,
+    allTokenTypes.avogadroConst,
+
+    allTokenTypes.boltzmannConst,
+    allTokenTypes.idealGasMolarVolume,
+    allTokenTypes.molarGasConst,
+    allTokenTypes.vacuumLightSpeed,
+
+    allTokenTypes.firstRadiationConst,
+    allTokenTypes.secondRadiationConst,
+    allTokenTypes.stefanBoltzmannConst,
+    allTokenTypes.electricConst,
+
+    allTokenTypes.magneticConst,
+    allTokenTypes.magneticFluxQuantum,
+    allTokenTypes.gravitationalAccel,
+    allTokenTypes.conductanceQuantum,
+
+    allTokenTypes.characteristicVacuumImpedance,
+    allTokenTypes.celsiusTemperature,
+    allTokenTypes.gravitationalConst,
+    allTokenTypes.atmosphere,
+];
+
+const suffixFuncTokenTypes = [
+    allTokenTypes.reciprocal,
+    allTokenTypes.fact,
+
+    allTokenTypes.cube,
+
+    allTokenTypes.square,
+
+    allTokenTypes.percentage,
+
+    allTokenTypes.asD,
+    allTokenTypes.asR,
+    allTokenTypes.asG,
+];
+
+const relationTokenTypes = [
+    allTokenTypes.eq,
+    allTokenTypes.neq,
+    allTokenTypes.greater,
+    allTokenTypes.less,
+    allTokenTypes.geq,
+    allTokenTypes.leq,
+];
+
+const infixFuncTokenTypes = [
+    ...relationTokenTypes,
+
+    allTokenTypes.multiply,
+    allTokenTypes.divide,
+
+    allTokenTypes.permutation,
+    allTokenTypes.combination,
+];
+
+const infixParenTokenTypes = [
+    allTokenTypes.power,
+    allTokenTypes.root,
+];
+
+const parenFuncTokenTypes = [
+    allTokenTypes.cbrt,
+    allTokenTypes.sqrt,
+    allTokenTypes.log,
+    allTokenTypes.tenExp,
+    allTokenTypes.ln,
+    allTokenTypes.eExp,
+    allTokenTypes.sin,
+    allTokenTypes.asin,
+    allTokenTypes.sinh,
+    allTokenTypes.asinh,
+    allTokenTypes.cos,
+    allTokenTypes.acos,
+    allTokenTypes.cosh,
+    allTokenTypes.acosh,
+    allTokenTypes.tan,
+    allTokenTypes.atan,
+    allTokenTypes.tanh,
+    allTokenTypes.atanh,
+    allTokenTypes.polar,
+    allTokenTypes.rect,
+    allTokenTypes.rnd,
+    allTokenTypes.abs,
+    allTokenTypes.openBracket,
+];
+
+const parenTokenTypes = [
+    ...parenFuncTokenTypes,
+    ...infixParenTokenTypes,
+];
+
+const expressionTokenTypes = [
+    ...literalTokenTypes,
+    ...variableTokenTypes,
+    ...constantTokenTypes,
+    ...suffixFuncTokenTypes,
+    ...infixFuncTokenTypes,
+    ...parenFuncTokenTypes,
+    ...infixParenTokenTypes,
+
+    allTokenTypes.ran,
+
+    allTokenTypes.frac,
+
+    allTokenTypes.neg,
+
+    allTokenTypes.deg,
+
+    allTokenTypes.closeBracket,
+
+    allTokenTypes.comma,
+
+    allTokenTypes.mPlus,
+    allTokenTypes.mMinus,
+
+    allTokenTypes.plus,
+    allTokenTypes.minus,
+
+    allTokenTypes.clrMemory,
+];
+
+const setupTokenTypes = [
+    allTokenTypes.degMode,
+    allTokenTypes.radMode,
+    allTokenTypes.graMode,
+    allTokenTypes.fixMode,
+    allTokenTypes.sciMode,
+    allTokenTypes.normMode,
+    allTokenTypes.freqOn,
+    allTokenTypes.freqOff,
+];
+
+const programTokenTypes = [
+    ...setupTokenTypes,
+
+    allTokenTypes.prompt,
+    allTokenTypes.assign,
+    allTokenTypes.separator,
+    allTokenTypes.disp,
+    allTokenTypes.fatArrow,
+    allTokenTypes.goto,
+    allTokenTypes.lbl,
+    allTokenTypes.while,
+    allTokenTypes.whileEnd,
+    allTokenTypes.next,
+    allTokenTypes.break,
+    allTokenTypes.for,
+    allTokenTypes.to,
+    allTokenTypes.step,
+    allTokenTypes.else,
+    allTokenTypes.ifEnd,
+    allTokenTypes.if,
+    allTokenTypes.then,
+];

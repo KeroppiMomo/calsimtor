@@ -40,7 +40,7 @@ type LexicalizationResult = {
     tokens: Token[];
     errorPosition: SourcePosition[];
 };
-function lexicalize(source: string, tokenSet: Record<string, TokenType>=allTokenTypes): LexicalizationResult {
+function lexicalize(source: string, tokenSet: TokenType[]=Object.values(allTokenTypes)): LexicalizationResult {
     const tokens = [];
     const errorPosition = [];
     let curLine = 0;
@@ -58,7 +58,7 @@ function lexicalize(source: string, tokenSet: Record<string, TokenType>=allToken
         }
 
         let matched = null;
-        for (const type of Object.values(tokenSet)) {
+        for (const type of tokenSet) {
             const n = type.source.length;
             if (source.substr(i, n) === type.source && (matched == null || n > matched.source.length)) {
                 matched = type;
