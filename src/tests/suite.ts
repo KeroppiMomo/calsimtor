@@ -1,8 +1,8 @@
-type TestCase = (() => boolean) | (() => Promise<boolean>);
-type TestCases = TestCase | TestCases[] | { [name: string]: TestCases };
+export type TestCase = (() => boolean) | (() => Promise<boolean>);
+export type TestCases = TestCase | TestCases[] | { [name: string]: TestCases };
 
 
-async function test(cases: TestCases) {
+export async function test(cases: TestCases) {
     if (cases instanceof Array) { // []
         for (let i=0; i < cases.length; ++i) {
             console.group(`Test ${i}`);

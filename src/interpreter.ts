@@ -1,9 +1,15 @@
-type InterpreterIO = {
+import {Context, VariableName} from "./context";
+import {evaluateExpression, throwRuntime} from "./expression";
+import {RuntimeError, RuntimeSyntaxError, RuntimeArgumentError, RuntimeGotoError, RuntimeStackError} from "./runtime-error";
+import {Token, SourcePosition, TokenIterator} from "./token";
+import {TokenType, allTokenTypes, VariableTokenType, expressionTokenTypes, setupTokenTypes, digitTokenTypes} from "./token-types";
+
+export type InterpreterIO = {
     display: (context: Context, tokens: Token[], value: number, isDisp: boolean) => Promise<void>;
     prompt: (context: Context, varName: VariableName) => Promise<number>;
 };
 
-type ExecContext = {
+export type ExecContext = {
     iter: TokenIterator;
     context: Context;
     io: InterpreterIO;
@@ -186,7 +192,7 @@ async function interpretCommand(execContext: ExecContext): Promise<void> {
     }
 }
 
-async function interpret(tokens: Token[], context: Context, io: InterpreterIO) {
+export async function interpret(tokens: Token[], context: Context, io: InterpreterIO) {
     if (tokens.length == 0) {
         throw new RuntimeSyntaxError(new SourcePosition(0, 0, 0), 0, "Empty program");
     }

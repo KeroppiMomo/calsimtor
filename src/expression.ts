@@ -1,4 +1,9 @@
-function throwRuntime(ErrorClass: typeof RuntimeError, iter: TokenIterator, failedMessage: string): never {
+import {Context, angleUnitToRad, AngleUnit, DisplayDigitsKind} from "./context";
+import {RuntimeError, RuntimeSyntaxError, RuntimeMathError, RuntimeStackError} from "./runtime-error";
+import {TokenIterator} from "./token";
+import {TokenType, allTokenTypes, DigitTokenType, literalTokenTypes, VariableTokenType, parenTokenTypes, digitTokenTypes, constantTokenTypes, variableTokenTypes, suffixFuncTokenTypes, parenFuncTokenTypes} from "./token-types";
+
+export function throwRuntime(ErrorClass: typeof RuntimeError, iter: TokenIterator, failedMessage: string): never {
     const pos = iter.isInBound() ? iter.cur()!.sourceStart : iter.last()!.sourceEnd;
     throw new ErrorClass(pos, iter.i, failedMessage);
 }
@@ -28,19 +33,6 @@ enum Precedence {
     L10,
     /** Precedence of suffix functions, power, root */
     L11,
-}
-
-class TokenIterator {
-    constructor(
-        public tokens: Token[],
-        public i = 0,
-    ) {}
-
-    cur(): Token | undefined { return this.tokens[this.i]; }
-    last(): Token | undefined { return this.tokens.at(-1); }
-    next(): void { ++this.i; }
-    prev(): void { --this.i; }
-    isInBound(): boolean { return this.i >= 0 && this.i < this.tokens.length; }
 }
 
 class StackEmptyError<T> extends Error {
@@ -874,7 +866,7 @@ const meetTokenMap = new Map<TokenType, MeetTokenFn>([
 ]);
 
 // Main function to evaluate expression
-function evaluateExpression(iter: TokenIterator, context: Context = new Context(), isIsolated: boolean = true) {
+export function evaluateExpression(iter: TokenIterator, context: Context = new Context(), isIsolated: boolean = true) {
     const evalStacks = new EvalStacks();
 
     evalStacks.numeric.pushPlaceholder();

@@ -1,10 +1,6 @@
-// typescript magic
-type UnionValues<TObj> = TObj[keyof TObj];
-type UnionFlattedValues<TObj, Key extends keyof TObj> = UnionValues<Omit<TObj, Key>> | UnionValues<TObj[Key]>;
-type Enumerate<N extends number, Arr extends number[] = []> = Arr["length"] extends N ? Arr[number] : Enumerate<N, [...Arr, Arr["length"]]>;
-type IntRange<Start extends number, End extends number> = Exclude<Enumerate<End>, Enumerate<Start>>;
+import {UnionFlattedValues, IntRange, UnionValues} from "./utility-types";
 
-const CalculationMode = {
+export const CalculationMode = {
     Comp: { index: 1 },
     Cmplx: { index: 2 },
     Base: { index: 3 },
@@ -19,14 +15,14 @@ const CalculationMode = {
         ABExp: { index: 5, subIndex: 7 },
     },
 } as const;
-type CalculationMode = UnionFlattedValues<typeof CalculationMode, "Reg">;
+export type CalculationMode = UnionFlattedValues<typeof CalculationMode, "Reg">;
 
-enum AngleUnit {
+export enum AngleUnit {
     Deg = "Deg",
     Rad = "Rad",
     Gra = "Gra",
 }
-function angleUnitToRad(unit: AngleUnit): number {
+export function angleUnitToRad(unit: AngleUnit): number {
     switch (unit) {
         case AngleUnit.Deg: return Math.PI / 180;
         case AngleUnit.Rad: return 1;
@@ -35,29 +31,29 @@ function angleUnitToRad(unit: AngleUnit): number {
     }
 }
 
-const DisplayDigitsKind = {
+export const DisplayDigitsKind = {
     Fix: "Fix",
     Sci: "Sci",
     Norm: "Norm",
 } as const;
-const DisplayDigits = {
+export const DisplayDigits = {
     Fix: (digits: IntRange<0, 10>) => ({ kind: DisplayDigitsKind.Fix, digits }),
     Sci: (digits: IntRange<1, 11>) => ({ kind: DisplayDigitsKind.Sci, digits }),
     Norm: (digits: 1 | 2) => ({ kind: DisplayDigitsKind.Norm, digits }),
 };
-type DisplayDigits = ReturnType<UnionValues<typeof DisplayDigits>>;
+export type DisplayDigits = ReturnType<UnionValues<typeof DisplayDigits>>;
 
-enum FractionFormat {
+export enum FractionFormat {
     Mixed = "Mixed",
     Improper = "Improper",
 }
 
-enum ComplexFormat {
+export enum ComplexFormat {
     Rectangular = "Rectangular",
     Polar = "Polar",
 }
 
-class SetupSettings {
+export class SetupSettings {
     angle: AngleUnit = AngleUnit.Deg;
     displayDigits: DisplayDigits = DisplayDigits.Norm(2);
     fractionFormat: FractionFormat = FractionFormat.Mixed;
@@ -78,7 +74,7 @@ class SetupSettings {
     }
 }
 
-class Variables {
+export class Variables {
     A = 0;
     B = 0;
     C = 0;
@@ -103,9 +99,9 @@ class Variables {
             && this.Ans === other.Ans;
     }
 };
-type VariableName = Exclude<keyof Variables, "equals">;
+export type VariableName = Exclude<keyof Variables, "equals">;
 
-class Context {
+export class Context {
     mode: CalculationMode = CalculationMode.Comp;
     setupSettings: SetupSettings = new SetupSettings();
     variables: Variables = new Variables();

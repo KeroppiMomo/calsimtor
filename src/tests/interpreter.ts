@@ -1,3 +1,10 @@
+import {interpret} from "../interpreter";
+import {lexicalize} from "../lexer";
+import {RuntimeError, RuntimeSyntaxError, RuntimeMathError, RuntimeArgumentError, RuntimeGotoError} from "../runtime-error";
+import {Token} from "../token";
+import { Context, Variables, VariableName } from "./../context";
+import { test, TestCase, TestCases } from "./suite";
+
 class EventMismatchError extends Error {}
 class InterpreterBreakError extends Error {}
 
@@ -471,4 +478,4 @@ function testInterpreter() {
     test(interpreterTests);
 }
 
-// testInterpreter();
+testInterpreter();

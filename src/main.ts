@@ -1,89 +1,10 @@
-class SourcePosition {
-    constructor(
-        public index: number,
-        public line: number,
-        public column: number,
-    ) {}
-}
-
-class Token {
-    get source() {
-        return this.type.source;
-    }
-    get shown() {
-        return this.type.shown;
-    }
-
-    constructor(
-        public type: TokenType,
-        public sourceStart: SourcePosition,
-        public sourceEnd: SourcePosition,
-    ) {}
-}
-
-class RuntimeError extends Error {
-    constructor(
-        public sourcePos: SourcePosition,
-        public tokenI: number,
-        message: string,
-    ) {
-        super(message);
-    }
-}
-class RuntimeSyntaxError extends RuntimeError {}
-class RuntimeMathError extends RuntimeError {}
-class RuntimeStackError extends RuntimeError {}
-class RuntimeArgumentError extends RuntimeError {}
-class RuntimeGotoError extends RuntimeError {}
-
-type LexicalizationResult = {
-    tokens: Token[];
-    errorPosition: SourcePosition[];
-};
-function lexicalize(source: string, tokenSet: TokenType[]=Object.values(allTokenTypes)): LexicalizationResult {
-    const tokens = [];
-    const errorPosition = [];
-    let curLine = 0;
-    let curColumn = 0;
-    for (let i = 0; i < source.length;) {
-        if (source[i] === " ") {
-            i++;
-            curColumn++;
-            continue;
-        } else if (source[i] === "\n") {
-            curColumn = 0;
-            curLine++;
-            i++;
-            continue;
-        }
-
-        let matched = null;
-        for (const type of tokenSet) {
-            const n = type.source.length;
-            if (source.substr(i, n) === type.source && (matched == null || n > matched.source.length)) {
-                matched = type;
-            }
-        }
-        if (!matched) {
-            errorPosition.push(new SourcePosition(i, curLine, curColumn));
-            i++;
-            curColumn++;
-            continue;
-        }
-        tokens.push(new Token(
-            matched,
-            new SourcePosition(i, curLine, curColumn),
-            new SourcePosition(i+matched.source.length, curLine, curColumn+matched.source.length)
-        ));
-        i += matched.source.length;
-        curColumn += matched.source.length;
-    }
-
-    return {
-        tokens,
-        errorPosition,
-    };
-}
+import {Context, VariableName} from "./context";
+import {evaluateExpression} from "./expression";
+import {interpret} from "./interpreter";
+import {LexicalizationResult, lexicalize} from "./lexer";
+import {RuntimeError, RuntimeSyntaxError, RuntimeMathError, RuntimeStackError} from "./runtime-error";
+import {Token, SourcePosition, TokenIterator} from "./token";
+import {expressionTokenTypes} from "./token-types";
 
 function tokensToString(tokens: Token[]) {
     return tokens.reduce((prev, cur) => prev + cur.shown, "");
@@ -200,7 +121,7 @@ let tokens: Token[] = [];
 let errorPosition = [];
 function sourceOnInput(el: HTMLTextAreaElement) {
     const result = lexicalize(el.value);
-    window.result = result;
+    (window as any).result = result;
     tokens = result.tokens;
     errorPosition = result.errorPosition;
 
@@ -213,4 +134,9 @@ function executeOnClick() {
         display: (_, tokens, value, isDisp) => display(tokens, value, isDisp),
         prompt: (context, varName) => promptInput(context, varName),
     });
+}
+
+if (window !== undefined) {
+    (window as any).sourceOnInput = sourceOnInput;
+    (window as any).executeOnClick = executeOnClick;
 }

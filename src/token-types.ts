@@ -1,4 +1,6 @@
-class TokenType {
+import {VariableName} from "./context";
+
+export class TokenType {
     source: string;
     shown: string;
 
@@ -8,18 +10,18 @@ class TokenType {
     }
 }
 
-class DigitTokenType extends TokenType {
+export class DigitTokenType extends TokenType {
     constructor(public value: number) {
         super(value.toString());
     }
 }
-class VariableTokenType extends TokenType {
+export class VariableTokenType extends TokenType {
     constructor(public varName: VariableName) {
         super(varName);
     }
 }
 
-const allTokenTypes = {
+export const allTokenTypes = {
     num0: new DigitTokenType(0),
     num1: new DigitTokenType(1),
     num2: new DigitTokenType(2),
@@ -198,7 +200,7 @@ const allTokenTypes = {
     then: new TokenType("Then", "Then "),
 };
 
-const digitTokenTypes = [
+export const digitTokenTypes = [
     allTokenTypes.num0,
     allTokenTypes.num1,
     allTokenTypes.num2,
@@ -210,14 +212,14 @@ const digitTokenTypes = [
     allTokenTypes.num8,
     allTokenTypes.num9,
 ];
-const literalTokenTypes = [
+export const literalTokenTypes = [
     ...digitTokenTypes,
 
     allTokenTypes.exp,
     allTokenTypes.dot,
 ];
 
-const variableTokenTypes = [
+export const variableTokenTypes = [
     allTokenTypes.varA,
     allTokenTypes.varB,
     allTokenTypes.varC,
@@ -228,7 +230,7 @@ const variableTokenTypes = [
     allTokenTypes.ans,
 ];
 
-const constantTokenTypes = [
+export const constantTokenTypes = [
     allTokenTypes.pi,
     allTokenTypes.e,
 
@@ -283,7 +285,7 @@ const constantTokenTypes = [
     allTokenTypes.atmosphere,
 ];
 
-const suffixFuncTokenTypes = [
+export const suffixFuncTokenTypes = [
     allTokenTypes.reciprocal,
     allTokenTypes.fact,
 
@@ -298,7 +300,7 @@ const suffixFuncTokenTypes = [
     allTokenTypes.asG,
 ];
 
-const relationTokenTypes = [
+export const relationTokenTypes = [
     allTokenTypes.eq,
     allTokenTypes.neq,
     allTokenTypes.greater,
@@ -307,7 +309,7 @@ const relationTokenTypes = [
     allTokenTypes.leq,
 ];
 
-const infixFuncTokenTypes = [
+export const infixFuncTokenTypes = [
     ...relationTokenTypes,
 
     allTokenTypes.multiply,
@@ -317,12 +319,12 @@ const infixFuncTokenTypes = [
     allTokenTypes.combination,
 ];
 
-const infixParenTokenTypes = [
+export const infixParenTokenTypes = [
     allTokenTypes.power,
     allTokenTypes.root,
 ];
 
-const parenFuncTokenTypes = [
+export const parenFuncTokenTypes = [
     allTokenTypes.cbrt,
     allTokenTypes.sqrt,
     allTokenTypes.log,
@@ -348,12 +350,12 @@ const parenFuncTokenTypes = [
     allTokenTypes.openBracket,
 ];
 
-const parenTokenTypes = [
+export const parenTokenTypes = [
     ...parenFuncTokenTypes,
     ...infixParenTokenTypes,
 ];
 
-const expressionTokenTypes = [
+export const expressionTokenTypes = [
     ...literalTokenTypes,
     ...variableTokenTypes,
     ...constantTokenTypes,
@@ -383,7 +385,7 @@ const expressionTokenTypes = [
     allTokenTypes.clrMemory,
 ];
 
-const setupTokenTypes = [
+export const setupTokenTypes = [
     allTokenTypes.degMode,
     allTokenTypes.radMode,
     allTokenTypes.graMode,
@@ -394,7 +396,7 @@ const setupTokenTypes = [
     allTokenTypes.freqOff,
 ];
 
-const programTokenTypes = [
+export const programTokenTypes = [
     ...setupTokenTypes,
 
     allTokenTypes.prompt,
