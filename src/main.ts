@@ -1,6 +1,6 @@
 import {Context, VariableName} from "./context";
 import {evaluateExpression} from "./expression";
-import {interpret} from "./interpreter";
+import {interpret, InterpreterDisplayEvent, InterpreterPromptEvent} from "./interpreter";
 import {LexicalizationResult, lexicalize} from "./lexer";
 import {RuntimeError, RuntimeSyntaxError, RuntimeMathError, RuntimeStackError} from "./runtime-error";
 import {Token, SourcePosition, TokenIterator} from "./token";
@@ -129,11 +129,16 @@ function sourceOnInput(el: HTMLTextAreaElement) {
     (document.getElementById("shown")! as HTMLTextAreaElement).value = tokensToString(tokens);
 }
 
-function executeOnClick() {
-    interpret(tokens, new Context(), {
-        display: (_, tokens, value, isDisp) => display(tokens, value, isDisp),
-        prompt: (context, varName) => promptInput(context, varName),
-    });
+async function executeOnClick() {
+    const InterpreterGenerator = interpret(tokens, new Context());
+    for (const event of InterpreterGenerator) {
+        if (event instanceof InterpreterDisplayEvent) {
+            await display(event.tokens, event.value, event.isDisp);
+        } else if (event instanceof InterpreterPromptEvent) {
+            const answer = await promptInput(event.context, event.varName);
+            event.response = { answer };
+        }
+    }
 }
 
 if (window !== undefined) {

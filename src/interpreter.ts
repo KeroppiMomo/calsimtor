@@ -4,18 +4,39 @@ import {RuntimeError, RuntimeSyntaxError, RuntimeArgumentError, RuntimeGotoError
 import {Token, SourcePosition, TokenIterator} from "./token";
 import {TokenType, allTokenTypes, VariableTokenType, expressionTokenTypes, setupTokenTypes, digitTokenTypes} from "./token-types";
 
-export type InterpreterIO = {
-    display: (context: Context, tokens: Token[], value: number, isDisp: boolean) => Promise<void>;
-    prompt: (context: Context, varName: VariableName) => Promise<number>;
-};
+// export type InterpreterIO = {
+//     display: (context: Context, tokens: Token[], value: number, isDisp: boolean) => Promise<void>;
+//     prompt: (context: Context, varName: VariableName) => Promise<number>;
+// };
 
 export type ExecContext = {
     iter: TokenIterator;
     context: Context;
-    io: InterpreterIO;
     value: number;
     tokenDisplayFrom: TokenIterator;
 };
+
+export interface InterpreterEvent {}
+export class InterpreterDisplayEvent implements InterpreterEvent {
+    constructor(
+        public context: Context,
+        public tokens: Token[],
+        public value: number,
+        public isDisp: boolean
+    ) {}
+}
+export class InterpreterPromptEvent implements InterpreterEvent {
+    constructor(
+        public context: Context,
+        public varName: VariableName,
+        public response?: { answer: number },
+    ) {}
+}
+export class InterpreterDebugEvent implements InterpreterEvent {
+    constructor(public execContext: ExecContext) {}
+}
+
+export type InterpreterGenerator<TReturn> = Generator<InterpreterEvent, TReturn, void>;
 
 function expectNext(iter: TokenIterator, type: TokenType, failedMessage: string, ErrorClass?: typeof RuntimeError): TokenType;
 function expectNext(iter: TokenIterator, types: TokenType[], failedMessage: string, ErrorClass?: typeof RuntimeError): TokenType;
@@ -59,17 +80,22 @@ function acceptAssignment({ iter }: ExecContext): VariableName {
     expectEnd(iter, "Assignment expects ending after variable");
     return varToken.type.varName;
 }
-async function meetPromptToken(execContext: ExecContext): Promise<void> {
-    const { context, iter, io, tokenDisplayFrom } = execContext;
+function* meetPromptToken(execContext: ExecContext): InterpreterGenerator<void> {
+    const { context, iter, tokenDisplayFrom } = execContext;
     tokenDisplayFrom.i = iter.i;
     iter.next();
     const varName = acceptAssignment(execContext);
-    const value = await io.prompt(context, varName);
+
+    const event = new InterpreterPromptEvent(context, varName);
+    yield event;
+    if (event.response === undefined) throw new Error("Prompt event must be responded");
+
+    const value = event.response.answer;
     context.variables[varName] = value;
     execContext.value = value;
 }
 
-async function meetExpressionToken(execContext: ExecContext): Promise<void> {
+function* meetExpressionToken(execContext: ExecContext): InterpreterGenerator<void> {
     const { context, iter } = execContext;
     const value = evaluateExpression(iter, context, false);
     context.variables.Ans = value;
@@ -81,11 +107,11 @@ async function meetExpressionToken(execContext: ExecContext): Promise<void> {
         const varName = acceptAssignment(execContext);
         context.variables[varName] = value;
     } else if (token.type === allTokenTypes.fatArrow) {
-        await meetFatArrowToken(execContext);
+        yield* meetFatArrowToken(execContext);
     } else return;
 }
 
-async function meetFatArrowToken(execContext: ExecContext): Promise<void> {
+function* meetFatArrowToken(execContext: ExecContext): InterpreterGenerator<void> {
     const { context, iter, tokenDisplayFrom } = execContext;
     iter.next();
     if (!iter.isInBound()) {
@@ -116,7 +142,7 @@ async function meetFatArrowToken(execContext: ExecContext): Promise<void> {
         if (iter.cur()!.type === allTokenTypes.disp) {
             iter.next();
             tokenDisplayFrom.i = iter.i;
-            if (iter.isInBound()) await interpretCommand(execContext);
+            if (iter.isInBound()) yield* interpretCommand(execContext);
             return;
         }
         throw new Error("Unreachable");
@@ -124,37 +150,37 @@ async function meetFatArrowToken(execContext: ExecContext): Promise<void> {
     } else {
 
         if (expressionTokenTypes.includes(token.type)) {
-            await meetExpressionToken(execContext);
+            yield* meetExpressionToken(execContext);
         } else if (setupTokenTypes.includes(token.type)) {
-            await meetSetupToken(execContext);
+            yield* meetSetupToken(execContext);
         } else if (token.type === allTokenTypes.prompt) {
-            await meetPromptToken(execContext);
+            yield* meetPromptToken(execContext);
         } else if (token.type === allTokenTypes.goto) {
-            await meetGotoToken(execContext);
+            yield* meetGotoToken(execContext);
         } else if (token.type === allTokenTypes.lbl) {
-            await meetLblToken(execContext);
+            yield* meetLblToken(execContext);
         } else if (token.type === allTokenTypes.break) {
-            await meetBreakToken(execContext);
+            yield* meetBreakToken(execContext);
         } else {
             throwRuntime(RuntimeSyntaxError, iter, "Unexpected token after fat arrow (a true result only accepts expression, setup, prompt, goto, lbl, break)");
         }
     }
 }
 
-async function meetLblToken(execContext: ExecContext): Promise<void> {
+function* meetLblToken(execContext: ExecContext): InterpreterGenerator<void> {
     const { iter } = execContext;
     iter.next();
     expectNext(iter, digitTokenTypes, "Expects 0-9 after Lbl", RuntimeArgumentError);
     expectEnd(iter, "Lbl expects ending after 0-9", RuntimeArgumentError);
 }
-async function meetGotoToken(execContext: ExecContext): Promise<void> {
-    const { context, iter, io, tokenDisplayFrom } = execContext;
+function* meetGotoToken(execContext: ExecContext): InterpreterGenerator<void> {
+    const { context, iter, tokenDisplayFrom } = execContext;
     const tokens = iter.tokens;
     iter.next();
     const labelTokenType = expectNext(iter, digitTokenTypes, "Expects 0-9 after Goto", RuntimeArgumentError);
     expectEnd(iter, "Goto expects ending after 0-9", RuntimeArgumentError);
     if (iter.isInBound() && iter.cur()!.type === allTokenTypes.disp) {
-        await io.display(context, tokens.slice(tokenDisplayFrom.i, iter.i), execContext.value, true);
+        yield new InterpreterDisplayEvent(context, tokens.slice(tokenDisplayFrom.i, iter.i), execContext.value, true);
     }
 
     const jumpI = tokens.findIndex((token, i) => i < tokens.length-1 && token.type === allTokenTypes.lbl && tokens[i+1]!.type === labelTokenType);
@@ -165,34 +191,34 @@ async function meetGotoToken(execContext: ExecContext): Promise<void> {
 
     iter.i = jumpI;
     tokenDisplayFrom.i = jumpI;
-    await interpretCommand(execContext);
+    yield* interpretCommand(execContext);
 }
 
-async function meetSetupToken(_: ExecContext): Promise<void> {
+function* meetSetupToken(_: ExecContext): InterpreterGenerator<void> {
     throw new Error("Unimplemented");
 }
-async function meetBreakToken(_: ExecContext): Promise<void> {
+function* meetBreakToken(_: ExecContext): InterpreterGenerator<void> {
     throw new Error("Unimplemented");
 }
 
-async function interpretCommand(execContext: ExecContext): Promise<void> {
+function* interpretCommand(execContext: ExecContext): InterpreterGenerator<void> {
     const { iter } = execContext;
     if (iter.cur()!.type === allTokenTypes.prompt) {
-        await meetPromptToken(execContext);
+        yield* meetPromptToken(execContext);
     } else if (expressionTokenTypes.includes(iter.cur()!.type)) {
-        await meetExpressionToken(execContext);
+        yield* meetExpressionToken(execContext);
     } else if (iter.cur()!.type === allTokenTypes.fatArrow) {
         throwRuntime(RuntimeSyntaxError, iter, "Fat arrow can only be used after expression");
     } else if (iter.cur()!.type === allTokenTypes.lbl) {
-        await meetLblToken(execContext);
+        yield* meetLblToken(execContext);
     } else if (iter.cur()!.type === allTokenTypes.goto) {
-        await meetGotoToken(execContext);
+        yield* meetGotoToken(execContext);
     } else {
         throwRuntime(RuntimeStackError, iter, "Unexpected token");
     }
 }
 
-export async function interpret(tokens: Token[], context: Context, io: InterpreterIO) {
+export function* interpret(tokens: Token[], context: Context): InterpreterGenerator<never> {
     if (tokens.length == 0) {
         throw new RuntimeSyntaxError(new SourcePosition(0, 0, 0), 0, "Empty program");
     }
@@ -202,7 +228,6 @@ export async function interpret(tokens: Token[], context: Context, io: Interpret
         const execContext: ExecContext = {
             iter,
             context,
-            io,
             value: 0,
             tokenDisplayFrom: new TokenIterator(tokens, 0),
         };
@@ -210,22 +235,22 @@ export async function interpret(tokens: Token[], context: Context, io: Interpret
         while (iter.isInBound()) {
             execContext.tokenDisplayFrom.i = iter.i;
 
-            await interpretCommand(execContext);
+            yield* interpretCommand(execContext);
 
             const tokensToBeDisplayed = tokens.slice(execContext.tokenDisplayFrom.i, iter.i);
             const value = execContext.value;
             if (!iter.isInBound()) {
-                await io.display(context, tokensToBeDisplayed, value, false);
+                yield new InterpreterDisplayEvent(context, tokensToBeDisplayed, value, false);
             } else if (iter.cur()!.type === allTokenTypes.separator) {
                 iter.next();
                 if (!iter.isInBound()) {
-                    await io.display(context, tokensToBeDisplayed, value, false);
+                    yield new InterpreterDisplayEvent(context, tokensToBeDisplayed, value, false);
                 }
             } else if (iter.cur()!.type === allTokenTypes.disp) {
-                await io.display(context, tokensToBeDisplayed, value, true);
+                yield new InterpreterDisplayEvent(context, tokensToBeDisplayed, value, true);
                 iter.next();
                 if (!iter.isInBound()) {
-                    await io.display(context, [], value, false);
+                    yield new InterpreterDisplayEvent(context, [], value, false);
                 }
             } else {
                 throwRuntime(RuntimeSyntaxError, iter, "Ending expected");
