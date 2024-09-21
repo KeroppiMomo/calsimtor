@@ -14,7 +14,7 @@ and spaces, line breaks and indents are allowed for better maintainability.
 
 You can use the lexer by opening `index.html` in your browser.
 
-![Lexicalisation of a program source code](demo/lexer.png)
+<a href="demo/lexer.png"><img src="demo/lexer.png" alt="Lexicalisation of a program source code" height="400"></a>
 
 **All COMP mode tokens are supported.**
 This includes digits, variables, physical constants, operators, functions, setup commands, and program control flow symbols.
@@ -34,8 +34,8 @@ This includes:
 
 You can type expressions into `index.html` and evaluate them by pressing "Execute".
 
-![Evaluating the expression 3 div 4^2](demo/expression1.png)
-![Evaluating the expression log(log(2,64,7776](demo/expression2.png)
+<a href="demo/expression1.png"><img src="demo/expression1.png" alt="Evaluating the expression 3 div 4^2" height="300"></a>
+<a href="demo/expression2.png"><img src="demo/expression2.png" alt="Evaluating the expression log(log(2,64,7776" height="300"></a>
 
 See [DOC.md](DOC.md) for explanations of various mechanisms and `src/tests/expression.ts` for examples.
 Evaluation of expressions are implemented in `src/expression.ts`.
