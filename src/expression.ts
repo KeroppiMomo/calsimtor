@@ -885,7 +885,10 @@ export function evaluateExpression(iter: TokenIterator, context: Context = new C
 
             meetFn(evalContext);
 
-            // console.log(evalStacks.numeric, evalStacks.command);
+            // console.log(JSON.stringify({
+            //     numeric: evalStacks.numeric._raw,
+            //     command: evalStacks.command._raw.map((el) => el.tokenType.shown),
+            // }));
         }
         if (evalStacks.numeric.isPlaceholder()) {
             throwRuntime(RuntimeSyntaxError, iter, "Expect number");
